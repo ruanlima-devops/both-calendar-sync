@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { AuthShell } from '@/components/auth/AuthShell';
-import { UnifyLogo } from '@/components/brand/UnifyLogo';
+import { BothLogo } from '@/components/brand/BothLogo';
 import { usePreferredColorScheme } from '@/hooks/usePreferredColorScheme';
 import { schemeTokens, space, type } from '@/lib/theme';
 
@@ -17,7 +17,7 @@ export function LegalDocument({ title, body }: LegalDocumentProps) {
   return (
     <AuthShell colors={colors}>
       <View style={styles.block}>
-        <UnifyLogo colors={colors} size="sm" />
+        <BothLogo colors={colors} size="sm" />
         <Text
           style={[styles.title, { color: colors.text }]}
           accessibilityRole="header"

@@ -23,7 +23,7 @@ function rule(over: Partial<FirewallRule> = {}): FirewallRule {
     syncConference: false,
     ignoreFree: true,
     ignoreCancelled: true,
-    placeholderTitle: 'Horário reservado · Unify',
+    placeholderTitle: 'Horário reservado · Both',
     busyStatus: 'busy',
     ...over,
   };
@@ -47,8 +47,8 @@ function event(over: Partial<NormalizedEvent> = {}): NormalizedEvent {
 describe('Calendar Firewall privacy', () => {
   it('availability preset hides all origin details', () => {
     const payload = mirrorPayloadFromRule(rule(), event(), 'sg1');
-    expect(payload.title).toBe('Horário reservado · Unify');
-    expect(payload.description).toContain('Unify');
+    expect(payload.title).toBe('Horário reservado · Both');
+    expect(payload.description).toContain('Both');
     expect(payload.location).toBeUndefined();
     expect(payload.role).toBe('MIRROR');
   });

@@ -102,7 +102,7 @@ export function billingProviderLabel(provider: string | null | undefined): strin
     case 'google':
       return 'Google Play';
     case 'internal':
-      return 'Teste Unify';
+      return 'Teste Both';
     default:
       return provider ?? '—';
   }

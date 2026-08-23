@@ -31,7 +31,22 @@ export async function readJsonBody(req: Request): Promise<Record<string, unknown
   }
 }
 
+/** Current variant schemes plus legacy Unify until STAGE/PROD OAuth migration. */
+const NATIVE_OAUTH_SCHEMES = ['both', 'both-dev', 'both-stg', 'unify'] as const;
+// TODO(rebrand): remove legacy `unify` scheme after STAGE/PROD OAuth migration.
+
+function isNativeOAuthRedirect(value: string): boolean {
+  return NATIVE_OAUTH_SCHEMES.some(
+    (scheme) =>
+      value === `${scheme}://oauth` ||
+      value.startsWith(`${scheme}://oauth?`) ||
+      value.startsWith(`${scheme}://oauth/`),
+  );
+}
+
 export function defaultAppRedirect(): string {
+  // Keep unify:// fallback so currently deployed APP_URL-less configs still resolve.
+  // TODO(rebrand): remove legacy `unify` scheme after STAGE/PROD OAuth migration.
   return envOptional('APP_URL') ?? 'unify://oauth';
 }
 
@@ -40,8 +55,7 @@ export function assertSafeAppRedirect(redirect: string): string {
   const value = redirect.trim();
   if (!value) return defaultAppRedirect();
 
-  // Custom scheme (native production / preview)
-  if (value === 'unify://oauth' || value.startsWith('unify://oauth?') || value.startsWith('unify://oauth/')) {
+  if (isNativeOAuthRedirect(value)) {
     return value.split('#')[0]!;
   }
 

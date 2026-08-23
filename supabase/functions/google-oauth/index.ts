@@ -31,7 +31,7 @@ function page(ok: boolean, redirectTo: string, error?: string): Response {
     title: ok ? 'Google Calendar conectado' : 'Não foi possível conectar',
     message: ok
       ? 'Esta janela pode ser fechada.'
-      : 'Não foi possível conectar sua conta Google. Volte ao Unify e tente novamente.',
+      : 'Não foi possível conectar sua conta Google. Volte ao Both e tente novamente.',
     redirectTo,
     error,
   });

@@ -12,7 +12,7 @@ export default function OAuthComplete() {
     const providerParam = Array.isArray(params.provider) ? params.provider[0] : params.provider;
     if (error && error !== 'access_denied') {
       const label = providerParam === 'microsoft' || connected === 'microsoft' ? 'Microsoft' : 'Google';
-      Alert.alert('Unify', `Não foi possível conectar sua conta ${label}. Tente novamente.`);
+      Alert.alert('Both', `Não foi possível conectar sua conta ${label}. Tente novamente.`);
     }
     router.replace('/(app)/(tabs)/calendars');
   }, [params.connected, params.oauth_error, params.provider, router]);

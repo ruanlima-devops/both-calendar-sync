@@ -5,6 +5,9 @@ describe('OAuth return URL allowlist', () => {
   it('allows native scheme', () => {
     expect(isSafeAppRedirect('unify://oauth')).toBe(true);
     expect(isSafeAppRedirect('unify://oauth?connected=google')).toBe(true);
+    expect(isSafeAppRedirect('both://oauth')).toBe(true);
+    expect(isSafeAppRedirect('both-dev://oauth')).toBe(true);
+    expect(isSafeAppRedirect('both-stg://oauth')).toBe(true);
   });
 
   it('allows localhost web', () => {

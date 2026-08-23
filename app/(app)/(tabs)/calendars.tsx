@@ -79,7 +79,7 @@ export default function CalendarsScreen() {
       await load();
       showToast(provider === 'microsoft' ? 'Microsoft conectado' : 'Google conectado');
     } catch (err) {
-      Alert.alert('Unify', friendlyError(err, 'Não foi possível conectar o calendário.'));
+      Alert.alert('Both', friendlyError(err, 'Não foi possível conectar o calendário.'));
     } finally {
       setConnecting(null);
     }
@@ -108,7 +108,7 @@ export default function CalendarsScreen() {
       await load();
       showToast('Apple iCloud conectado');
     } catch (err) {
-      Alert.alert('Unify', friendlyError(err, 'Não foi possível conectar o iCloud.'));
+      Alert.alert('Both', friendlyError(err, 'Não foi possível conectar o iCloud.'));
     } finally {
       setConnecting(null);
     }
@@ -306,7 +306,7 @@ export default function CalendarsScreen() {
             <Typography variant="pageTitle">Conectar iCloud Calendar</Typography>
             <Typography variant="body" muted>
               Para conectar com segurança, use uma senha específica de app da sua Conta Apple. Sua senha
-              principal da Apple nunca é enviada ao Unify.
+              principal da Apple nunca é enviada ao Both.
             </Typography>
 
             <Pressable onPress={() => setShowHelp((v) => !v)}>
@@ -326,7 +326,7 @@ export default function CalendarsScreen() {
                   3. Escolha Senhas específicas de apps
                 </Typography>
                 <Typography variant="caption" muted>
-                  4. Gere uma senha chamada “Unify”
+                  4. Gere uma senha chamada “Both”
                 </Typography>
                 <Typography variant="caption" muted>
                   5. Cole a senha abaixo

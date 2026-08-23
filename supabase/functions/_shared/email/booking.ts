@@ -28,11 +28,11 @@ export function bookingConfirmationEmail(input: {
     '',
     `Cancelar ou reagendar: ${manageUrl}`,
     '',
-    '— Unify',
+    '— Both',
   ].join('\n');
 
   const html = `<!DOCTYPE html><html><body style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;color:#0f172a;line-height:1.5;padding:24px;">
-  <p style="letter-spacing:4px;font-weight:700;font-size:12px;color:#64748b;">UNIFY</p>
+  <p style="letter-spacing:4px;font-weight:700;font-size:12px;color:#64748b;">BOTH</p>
   <h1 style="font-size:22px;margin:16px 0 8px;">Agendamento confirmado</h1>
   <p style="margin:0 0 20px;color:#64748b;">Olá ${escapeHtml(input.guestName)},</p>
   <div style="padding:16px 18px;background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;">
@@ -42,7 +42,7 @@ export function bookingConfirmationEmail(input: {
   </div>
   <p style="margin:20px 0 8px;">Um convite foi enviado para <strong>${escapeHtml(input.guestEmail)}</strong>.</p>
   <p style="margin:24px 0;"><a href="${manageUrl}" style="color:#2563eb;">Cancelar ou reagendar</a></p>
-  <p style="color:#94a3b8;font-size:13px;">— Unify</p>
+  <p style="color:#94a3b8;font-size:13px;">— Both</p>
 </body></html>`;
 
   return { subject, html, text };

@@ -253,7 +253,7 @@ export async function loadSyncContext(
       syncConference: Boolean(r.sync_conference),
       ignoreFree: Boolean(r.ignore_free),
       ignoreCancelled: Boolean(r.ignore_cancelled),
-      placeholderTitle: String(r.placeholder_title ?? 'Horário reservado · Unify'),
+      placeholderTitle: String(r.placeholder_title ?? 'Horário reservado · Both'),
       busyStatus: (r.busy_status as FirewallRule['busyStatus']) ?? 'busy',
     })),
   };

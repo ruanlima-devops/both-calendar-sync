@@ -29,7 +29,7 @@ export default function Onboarding() {
       const { data: rows } = await supabase.from('connected_calendars').select('*');
       setCalendars((rows ?? []) as ConnectedCalendar[]);
     } catch {
-      Alert.alert('Unify', 'Não foi possível conectar o calendário. Tente novamente.');
+      Alert.alert('Both', 'Não foi possível conectar o calendário. Tente novamente.');
     }
   }
 

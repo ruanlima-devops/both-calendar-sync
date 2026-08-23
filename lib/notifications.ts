@@ -36,8 +36,8 @@ export function providerLabel(provider: ProviderName | 'UNIFY' | null): string {
   if (provider === 'GOOGLE') return 'Google';
   if (provider === 'MICROSOFT') return 'Microsoft';
   if (provider === 'ICLOUD') return 'Apple iCloud';
-  if (provider === 'UNIFY') return 'Unify';
-  return 'Unify';
+  if (provider === 'UNIFY') return 'Both';
+  return 'Both';
 }
 
 export function unreadBadgeLabel(count: number): string | null {

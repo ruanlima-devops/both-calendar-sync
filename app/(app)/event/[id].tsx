@@ -129,7 +129,7 @@ export default function EventDetailScreen() {
           }}
         >
           <Typography variant="body">
-            Este período foi bloqueado automaticamente pelo Unify para evitar conflitos entre suas agendas.
+            Este período foi bloqueado automaticamente pelo Both para evitar conflitos entre suas agendas.
           </Typography>
           <Typography variant="metadata" muted>
             Os detalhes do compromisso original permanecem privados.
@@ -199,7 +199,7 @@ export default function EventDetailScreen() {
           <Typography variant="body" muted>
             “{title}” será removido do {providerLabel}.
             {mirrorCount > 0
-              ? ' As reservas criadas pelo Unify nas outras agendas também serão removidas.'
+              ? ' As reservas criadas pelo Both nas outras agendas também serão removidas.'
               : ''}{' '}
             Esta ação não pode ser desfeita.
           </Typography>

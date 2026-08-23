@@ -12,7 +12,7 @@ export class AppErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('[UnifyErrorBoundary]', error.message, info.componentStack);
+    console.error('[BothErrorBoundary]', error.message, info.componentStack);
   }
 
   render() {
@@ -21,7 +21,7 @@ export class AppErrorBoundary extends Component<Props, State> {
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 12 }}>
         <Text style={{ fontSize: 18, fontWeight: '700', textAlign: 'center' }}>Algo deu errado</Text>
         <Text style={{ textAlign: 'center', opacity: 0.7 }}>
-          Reinicie a tela. Se o problema continuar, feche e abra o Unify.
+          Reinicie a tela. Se o problema continuar, feche e abra o Both.
         </Text>
         <Pressable
           onPress={() => this.setState({ error: null })}

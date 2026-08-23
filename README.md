@@ -1,13 +1,23 @@
-# Unify
+# Both: Calendar Sync
 
-Calendário unificado Google + Microsoft. Um app Expo (iOS, Android, Web) e Supabase.
+Sincroniza disponibilidade e eventos entre os calendários conectados (Google, Microsoft e iCloud), evitando loops de sincronização e eventos espelhados duplicados.
 
-O produto: conectar as duas agendas e, ao criar um compromisso, bloquear as outras com um evento "Ocupado" — sem loops e sem copiar detalhes privados.
+O nome anterior do projeto era **Unify**. Identificadores persistidos (entitlements, metadados de evento, scheme OAuth legado `unify://`) permanecem até a migração STAGE/PROD.
 
 ## Stack
 
 - Expo 57 + Expo Router + TypeScript
 - Supabase (Auth, Postgres, RLS, Realtime, Edge Functions)
+
+## Variantes
+
+| `APP_VARIANT` | Nome visível | Bundle ID | Scheme |
+| --- | --- | --- | --- |
+| `development` (padrão local) | Both DEV | `com.bothcalendarsync.app.dev` | `both-dev` |
+| `preview` | Both STG | `com.bothcalendarsync.app.staging` | `both-stg` |
+| `production` | Both: Calendar Sync | `com.bothcalendarsync.app` | `both` |
+
+O scheme legado `unify` continua registrado em todas as variantes até a migração OAuth.
 
 ## Setup
 
@@ -41,10 +51,9 @@ Login (Supabase Auth) e conexão de calendário são OAuth separados. Você pode
 
 - Recorrência: leitura/exibição de ocorrências. Sem criar/editar séries.
 - 1 conta Google + 1 Microsoft por usuário (beta).
-- Mirror padrão: título `Ocupado`, sem descrição/local/participantes.
-- Sem billing, polls, booking ou IA.
+- Mirror padrão: título `Horário reservado · Both`, sem descrição/local/participantes copiados.
+- Billing e agendamento estão em construção.
 
 ## Testes
 
 `npm test` cobre importação, idempotência de webhook, auto-block, anti-loop, update/delete de origin, mirror abandonado, token/resync, timezone/DST e all-day.
-# unify-dev

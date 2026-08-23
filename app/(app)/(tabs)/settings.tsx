@@ -62,7 +62,7 @@ export default function AccountScreen() {
         await refreshProfile();
         if (toastMessage) showToast(toastMessage);
       } catch (err) {
-        Alert.alert('Unify', friendlyError(err));
+        Alert.alert('Both', friendlyError(err));
       } finally {
         setSaving(false);
       }
@@ -102,7 +102,7 @@ export default function AccountScreen() {
                 await invokeFunction('delete-account');
                 await supabase.auth.signOut();
               } catch (err) {
-                Alert.alert('Unify', friendlyError(err, 'Não foi possível excluir a conta.'));
+                Alert.alert('Both', friendlyError(err, 'Não foi possível excluir a conta.'));
               } finally {
                 setDeleting(false);
               }
@@ -236,7 +236,7 @@ export default function AccountScreen() {
       </Card>
 
       <Card>
-        <Typography variant="sectionTitle">Notificações no Unify</Typography>
+        <Typography variant="sectionTitle">Notificações no Both</Typography>
         <SwitchRow
           label="Novo evento"
           value={profile?.notify_event_created ?? true}
@@ -276,7 +276,7 @@ export default function AccountScreen() {
           <Typography variant="caption" muted>
             Plano
           </Typography>
-          <Typography variant="body">{subscription?.plan_id === 'unify_pro' ? 'Unify Pro' : subscription?.plan_id ?? '—'}</Typography>
+          <Typography variant="body">{subscription?.plan_id === 'unify_pro' ? 'Both Pro' : subscription?.plan_id ?? '—'}</Typography>
         </View>
         <View style={{ gap: 6 }}>
           <Typography variant="caption" muted>
@@ -321,7 +321,7 @@ export default function AccountScreen() {
           </View>
         ) : null}
         {!entitlement.hasAccess ? (
-          <Button label="Assinar Unify Pro" onPress={() => router.push('/(app)/paywall')} />
+          <Button label="Assinar Both Pro" onPress={() => router.push('/(app)/paywall')} />
         ) : entitlement.source === 'subscription' ? (
           <Button
             label="Gerenciar assinatura"
@@ -342,8 +342,8 @@ export default function AccountScreen() {
                   }
                   if (Platform.OS !== 'web' && provider === 'stripe') {
                     Alert.alert(
-                      'Unify',
-                      'Sua assinatura foi feita na Web. Abra o Unify no navegador para gerenciar pelo portal Stripe, ou cancele pelo e-mail de recibo.',
+                      'Both',
+                      'Sua assinatura foi feita na Web. Abra o Both no navegador para gerenciar pelo portal Stripe, ou cancele pelo e-mail de recibo.',
                     );
                     return;
                   }
@@ -353,7 +353,7 @@ export default function AccountScreen() {
                     `${process.env.EXPO_PUBLIC_SUPABASE_URL ?? ''}/`,
                   );
                 } catch (err) {
-                  Alert.alert('Unify', friendlyError(err));
+                  Alert.alert('Both', friendlyError(err));
                 }
               })();
             }}

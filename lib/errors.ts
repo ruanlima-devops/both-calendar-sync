@@ -11,7 +11,7 @@ const FRIENDLY: Record<string, string> = {
   end_before_start: 'O horário final deve ser depois do início.',
   calendar_read_only: 'Este calendário é somente leitura.',
   calendar_not_found: 'Calendário não encontrado.',
-  ENTITLEMENT_REQUIRED: 'Assine o Unify Pro para usar esta funcionalidade.',
+  ENTITLEMENT_REQUIRED: 'Assine o Both Pro para usar esta funcionalidade.',
   SLOT_UNAVAILABLE: 'Este horário acabou de ficar indisponível. Escolha outro horário.',
   link_disabled: 'Este link de agendamento está desativado.',
   link_expired: 'Este link de agendamento expirou.',

@@ -41,7 +41,7 @@ END:VCALENDAR`;
   it('builds opaque busy block with unify props', () => {
     const ics = buildVEvent({
       uid: 'u1',
-      title: 'Horário reservado · Unify',
+      title: 'Horário reservado · Both',
       startAt: '2026-08-24T14:00:00.000Z',
       endAt: '2026-08-24T15:00:00.000Z',
       timezone: 'UTC',

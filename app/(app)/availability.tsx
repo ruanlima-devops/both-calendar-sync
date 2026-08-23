@@ -77,7 +77,7 @@ export default function AvailabilityScreen() {
 
   async function save() {
     if (!sourceId || !destId) {
-      Alert.alert('Unify', 'Escolha origem e destino.');
+      Alert.alert('Both', 'Escolha origem e destino.');
       return;
     }
     setBusy(true);
@@ -98,7 +98,7 @@ export default function AvailabilityScreen() {
       setEditingId(null);
       await load();
     } catch (err) {
-      Alert.alert('Unify', friendlyError(err, 'Não foi possível salvar a regra.'));
+      Alert.alert('Both', friendlyError(err, 'Não foi possível salvar a regra.'));
     } finally {
       setBusy(false);
     }
@@ -134,7 +134,7 @@ export default function AvailabilityScreen() {
       showToast(enabled ? 'Regra ativada' : 'Regra desativada');
       await load();
     } catch (err) {
-      Alert.alert('Unify', friendlyError(err));
+      Alert.alert('Both', friendlyError(err));
     } finally {
       setBusy(false);
     }
@@ -154,7 +154,7 @@ export default function AvailabilityScreen() {
               showToast('Regra removida');
               await load();
             } catch (err) {
-              Alert.alert('Unify', friendlyError(err));
+              Alert.alert('Both', friendlyError(err));
             } finally {
               setBusy(false);
             }

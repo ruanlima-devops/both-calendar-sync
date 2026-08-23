@@ -67,7 +67,7 @@ function escapeIcs(value: string): string {
     .replace(/\n/g, '\\n');
 }
 
-/** Parse DTSTART/DTEND style values into Unify normalized times. */
+/** Parse DTSTART/DTEND style values into Both normalized times. */
 export function parseIcsDate(
   value: string,
   params: Record<string, string>,

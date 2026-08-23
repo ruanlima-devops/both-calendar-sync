@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
-import { OAUTH_PATH } from '@/lib/app';
+import { LEGACY_APP_SCHEME, OAUTH_PATH } from '@/lib/app';
 import { invokeFunction } from '@/lib/supabase';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -76,10 +76,11 @@ function outcomeFromUrl(url: string): 'ok' | 'error' | 'cancel' {
 /**
  * Connect Google/Microsoft Calendar.
  * Web: popup + postMessage race (existing).
- * Native: secure browser → unify://oauth deep link.
+ * Native: secure browser → legacy unify://oauth deep link
+ * (TODO(rebrand): switch to APP_SCHEME after STAGE/PROD OAuth migration).
  */
 export async function connectCalendar(provider: 'google' | 'microsoft'): Promise<void> {
-  const redirect = Linking.createURL(OAUTH_PATH);
+  const redirect = Linking.createURL(OAUTH_PATH, { scheme: LEGACY_APP_SCHEME });
   const data = await invokeFunction<OAuthFunctionResponse>(`${provider}-oauth`, { redirect });
   const authorizationUrl = data.authorizationUrl;
   if (!authorizationUrl) {

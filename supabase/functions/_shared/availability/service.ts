@@ -50,7 +50,7 @@ export async function loadLinkByPublicPath(
 
   return {
     link: link as SchedulingLinkRow,
-    displayName: String(profile.display_name ?? profile.booking_username ?? 'Unify'),
+    displayName: String(profile.display_name ?? profile.booking_username ?? 'Both'),
     conflictCalendarIds: (cals ?? []).map((c) => String(c.connected_calendar_id)),
   };
 }

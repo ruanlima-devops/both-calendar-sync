@@ -1,7 +1,22 @@
-/** Central app identity — keep in sync with app.config.ts */
+import Constants from 'expo-constants';
 
-export const APP_SCHEME = 'unify';
-export const BUNDLE_ID = 'app.unify.calendar';
+type Extra = {
+  appScheme?: string;
+  bundleIdentifier?: string;
+};
+
+const extra = (Constants.expoConfig?.extra ?? {}) as Extra;
+
+/** Primary URL scheme for the current app variant. */
+export const APP_SCHEME = extra.appScheme ?? 'both-dev';
+
+/**
+ * TODO(rebrand): remove legacy `unify` scheme after STAGE/PROD OAuth migration.
+ * Native OAuth callbacks still use this scheme so existing remote allowlists keep working.
+ */
+export const LEGACY_APP_SCHEME = 'unify';
+
+export const BUNDLE_ID = extra.bundleIdentifier ?? 'com.bothcalendarsync.app.dev';
 export const OAUTH_PATH = 'oauth';
 export const AUTH_CALLBACK_PATH = 'auth/callback';
 

@@ -28,7 +28,7 @@ Deno.serve((req) =>
       return json({
         plan: {
           id: plan?.id ?? 'unify_pro',
-          name: plan?.name ?? 'Unify Pro',
+          name: plan?.name ?? 'Both Pro',
           interval: plan?.billing_interval ?? 'month',
           currency: plan?.currency ?? 'brl',
         },

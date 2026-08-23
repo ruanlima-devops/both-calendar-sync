@@ -44,7 +44,7 @@ export function TrialBanner() {
       </Typography>
       {entitlement.trialUrgency === 'urgent' ? (
         <Typography variant="metadata" style={{ color: theme.primary, marginTop: 4 }}>
-          Assinar Unify Pro →
+          Assinar Both Pro →
         </Typography>
       ) : null}
     </Pressable>
