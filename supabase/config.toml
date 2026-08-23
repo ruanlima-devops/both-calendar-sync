@@ -1,0 +1,72 @@
+project_id = "unify"
+
+[api]
+enabled = true
+schemas = ["public"]
+extra_search_path = ["public"]
+
+[functions.google-oauth]
+verify_jwt = false
+
+[functions.microsoft-oauth]
+verify_jwt = false
+
+[functions.google-webhook]
+verify_jwt = false
+
+[functions.microsoft-webhook]
+verify_jwt = false
+
+[functions.renew-subscriptions]
+verify_jwt = false
+
+[functions.reconcile-sync]
+verify_jwt = false
+
+[functions.sync-calendar]
+verify_jwt = false
+
+[functions.sync-now]
+verify_jwt = true
+
+[functions.send-email-digest]
+verify_jwt = false
+
+[functions.delete-account]
+verify_jwt = true
+
+[functions.billing-checkout]
+verify_jwt = false
+
+[functions.billing-webhook]
+verify_jwt = false
+
+[functions.billing-portal]
+verify_jwt = true
+
+[functions.scheduling-links]
+verify_jwt = true
+
+[functions.public-booking]
+verify_jwt = false
+
+[functions.manage-booking]
+verify_jwt = false
+
+[functions.create-event]
+verify_jwt = true
+
+[functions.update-event]
+verify_jwt = true
+
+[functions.delete-event]
+verify_jwt = true
+
+[functions.firewall-rules]
+verify_jwt = true
+
+[functions.icloud-connect]
+verify_jwt = true
+
+[functions.icloud-poll]
+verify_jwt = false

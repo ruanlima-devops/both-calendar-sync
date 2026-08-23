@@ -16,6 +16,7 @@ expo-env.d.ts
 *.p8
 *.p12
 *.key
+*.pem
 *.mobileprovision
 
 # Metro
@@ -28,10 +29,14 @@ yarn-error.*
 
 # macOS
 .DS_Store
-*.pem
 
-# local env files
+# Environment / secrets
+.env
+.env.functions
 .env*.local
+
+# Supabase CLI local state
+supabase/.temp/
 
 # typescript
 *.tsbuildinfo

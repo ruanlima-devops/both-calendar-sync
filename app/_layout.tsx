@@ -1,56 +1,30 @@
-import { useFonts } from 'expo-font';
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
-import 'react-native-reanimated';
+import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { AppErrorBoundary } from '@/components/AppErrorBoundary';
+import { OfflineBanner } from '@/components/OfflineBanner';
+import { SessionProvider, useSession } from '@/context/session';
+import { usePreferredColorScheme } from '@/hooks/usePreferredColorScheme';
+import { resolveColorScheme } from '@/lib/theme';
+import type { ColorSchemePreference } from '@/lib/types';
 
-import { useColorScheme } from '@/components/useColorScheme';
-
-export {
-  // Catch any errors thrown by the Layout component.
-  ErrorBoundary,
-} from 'expo-router';
-
-export const unstable_settings = {
-  // Ensure that reloading on `/modal` keeps a back button present.
-  initialRouteName: '(tabs)',
-};
-
-// Prevent the splash screen from auto-hiding before asset loading is complete.
-SplashScreen.preventAutoHideAsync();
-
-export default function RootLayout() {
-  const [loaded, error] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
-  });
-
-  // Expo Router uses Error Boundaries to catch errors in the navigation tree.
-  useEffect(() => {
-    if (error) throw error;
-  }, [error]);
-
-  useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
-    }
-  }, [loaded]);
-
-  if (!loaded) {
-    return null;
-  }
-
-  return <RootLayoutNav />;
+function ThemedStatusBar() {
+  const system = usePreferredColorScheme();
+  const { profile } = useSession();
+  const scheme = resolveColorScheme(profile?.color_scheme as ColorSchemePreference | undefined, system);
+  return <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />;
 }
 
-function RootLayoutNav() {
-  const colorScheme = useColorScheme();
-
+export default function RootLayout() {
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-      </Stack>
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <AppErrorBoundary>
+        <SessionProvider>
+          <ThemedStatusBar />
+          <OfflineBanner />
+          <Stack screenOptions={{ headerShown: false }} />
+        </SessionProvider>
+      </AppErrorBoundary>
+    </SafeAreaProvider>
   );
 }
