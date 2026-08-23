@@ -1,4 +1,4 @@
-project_id = "unify"
+project_id = "both-stage"
 
 [api]
 enabled = true
