@@ -20,22 +20,22 @@ export interface DigestTemplateInput {
 export function digestSubject(input: DigestTemplateInput): string {
   const who = input.displayName ? `${input.displayName}, ` : '';
   if (input.period.type === 'weekly') {
-    return `${who}sua semana no Unify (${input.period.titleLabel})`;
+    return `${who}sua semana no Both (${input.period.titleLabel})`;
   }
-  return `${who}seu mês no Unify (${input.period.titleLabel})`;
+  return `${who}seu mês no Both (${input.period.titleLabel})`;
 }
 
 export function digestText(input: DigestTemplateInput): string {
   const lines: string[] = [];
-  const heading = input.period.type === 'weekly' ? 'Sua semana no Unify' : 'Seu mês no Unify';
+  const heading = input.period.type === 'weekly' ? 'Sua semana no Both' : 'Seu mês no Both';
   lines.push(heading, input.period.titleLabel, '');
   if (input.events.length === 0) {
     lines.push(
       input.period.type === 'weekly'
         ? 'Sua semana está livre — nenhum compromisso programado.'
-        : 'Seu mês passado não teve compromissos registrados no Unify.',
+        : 'Seu mês passado não teve compromissos registrados no Both.',
       '',
-      `Abrir Unify: ${input.appUrl}`,
+      `Abrir Both: ${input.appUrl}`,
       `Preferências de email: ${input.preferencesUrl}`,
     );
     return lines.join('\n');
@@ -53,15 +53,15 @@ export function digestText(input: DigestTemplateInput): string {
     lines.push('');
   }
 
-  lines.push(`Abrir Unify: ${input.appUrl}`, `Gerenciar emails: ${input.preferencesUrl}`);
+  lines.push(`Abrir Both: ${input.appUrl}`, `Gerenciar emails: ${input.preferencesUrl}`);
   return lines.join('\n');
 }
 
 export function digestHtml(input: DigestTemplateInput): string {
-  const heading = input.period.type === 'weekly' ? 'Sua semana no Unify' : 'Seu mês no Unify';
+  const heading = input.period.type === 'weekly' ? 'Sua semana no Both' : 'Seu mês no Both';
   const emptyCopy = input.period.type === 'weekly'
     ? 'Sua semana está livre — nenhum compromisso programado.'
-    : 'Seu mês passado não teve compromissos registrados no Unify.';
+    : 'Seu mês passado não teve compromissos registrados no Both.';
 
   const stats = input.events.length === 0
     ? `<p style="margin:0;color:#64748b;font-size:15px;line-height:1.6;">${emptyCopy}</p>`
@@ -94,13 +94,13 @@ export function digestHtml(input: DigestTemplateInput): string {
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
     <table role="presentation" width="100%" style="max-width:560px;background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;">
       <tr><td style="padding:32px 28px;">
-        <div style="font-size:13px;font-weight:700;color:#2563eb;letter-spacing:0.04em;">UNIFY</div>
+        <div style="font-size:13px;font-weight:700;color:#2563eb;letter-spacing:0.04em;">BOTH</div>
         <h1 style="margin:12px 0 4px;font-size:24px;color:#0f172a;">${heading}</h1>
         <p style="margin:0 0 20px;color:#64748b;font-size:15px;">${escapeHtml(input.period.titleLabel)}</p>
         ${stats}
         ${body}
         <p style="margin:28px 0 16px;">
-          <a href="${escapeHtml(input.appUrl)}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:999px;font-weight:600;font-size:15px;">Abrir Unify</a>
+          <a href="${escapeHtml(input.appUrl)}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:999px;font-weight:600;font-size:15px;">Abrir Both</a>
         </p>
         <p style="margin:0;font-size:12px;color:#94a3b8;line-height:1.5;">
           <a href="${escapeHtml(input.preferencesUrl)}" style="color:#64748b;">Gerenciar preferências de email</a>

@@ -168,7 +168,7 @@ export async function createBooking(
       },
       {
         title: `${link.title} — ${guestName}`,
-        description: `Agendado via Unify\nAnfitrião: ${loaded.displayName}\nConvidado: ${guestName} <${guestEmail}>${notes}`,
+        description: `Agendado via Both\nAnfitrião: ${loaded.displayName}\nConvidado: ${guestName} <${guestEmail}>${notes}`,
         location,
         startAt: input.startAt,
         endAt,

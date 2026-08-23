@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { UnifyLogo } from '@/components/brand/UnifyLogo';
+import { BothLogo } from '@/components/brand/BothLogo';
 import { Button } from '@/components/ui/Button';
 import { Screen } from '@/components/ui/Screen';
 import { Typography } from '@/components/ui/Typography';
@@ -103,7 +103,7 @@ export default function ManageBookingPage() {
 
   return (
     <Screen scroll>
-      <UnifyLogo colors={brand} size="sm" />
+      <BothLogo colors={brand} size="sm" />
       <Typography variant="pageTitle">Gerenciar agendamento</Typography>
       {error ? (
         <Typography variant="body" style={{ color: theme.danger }}>

@@ -14,7 +14,7 @@ export async function sendEmail(message: OutboundEmail): Promise<{ id?: string; 
     return { skipped: true };
   }
 
-  const from = envOptional('RESEND_FROM_EMAIL') ?? 'Unify <onboarding@resend.dev>';
+  const from = envOptional('RESEND_FROM_EMAIL') ?? 'Both <onboarding@resend.dev>';
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {

@@ -3,7 +3,7 @@ import { applyStoreEntitlement, recordBillingEvent } from '../_shared/billing/we
 import { env, logSafe } from '../_shared/http.ts';
 
 /**
- * RevenueCat → Unify Pro entitlement.
+ * RevenueCat → Both Pro entitlement.
  * Configure webhook in RevenueCat dashboard to this function URL.
  * Auth: Authorization Bearer REVENUECAT_WEBHOOK_SECRET
  */

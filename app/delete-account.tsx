@@ -38,9 +38,9 @@ export default function DeleteAccountPage() {
 
   return (
     <Screen scroll>
-      <Typography variant="pageTitle">Excluir conta Unify</Typography>
+      <Typography variant="pageTitle">Excluir conta Both</Typography>
       <Typography variant="body" muted>
-        Esta página permite solicitar a exclusão permanente da sua conta Unify, incluindo perfil,
+        Esta página permite solicitar a exclusão permanente da sua conta Both, incluindo perfil,
         calendários conectados, eventos sincronizados, preferências e notificações in-app.
       </Typography>
       <Typography variant="body" muted>
@@ -56,7 +56,7 @@ export default function DeleteAccountPage() {
         </Typography>
       ) : !session ? (
         <View style={{ gap: space.sm }}>
-          <Typography variant="body">Entre na sua conta Unify para solicitar a exclusão.</Typography>
+          <Typography variant="body">Entre na sua conta Both para solicitar a exclusão.</Typography>
           <Button label="Ir para login" onPress={() => router.push('/(auth)/login')} />
         </View>
       ) : (

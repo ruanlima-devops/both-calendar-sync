@@ -108,6 +108,7 @@ export const RESERVED_USERNAMES = new Set([
   'app',
   'www',
   'unify',
+  'both',
   'delete-account',
 ]);
 

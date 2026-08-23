@@ -1,10 +1,23 @@
 /** Mirror of Edge Function allowlist — keep in sync with supabase/functions/_shared/oauth.ts */
 
+/** Current variant schemes plus legacy Unify until STAGE/PROD OAuth migration. */
+const NATIVE_OAUTH_SCHEMES = ['both', 'both-dev', 'both-stg', 'unify'] as const;
+// TODO(rebrand): remove legacy `unify` scheme after STAGE/PROD OAuth migration.
+
+function isNativeOAuthRedirect(value: string): boolean {
+  return NATIVE_OAUTH_SCHEMES.some(
+    (scheme) =>
+      value === `${scheme}://oauth` ||
+      value.startsWith(`${scheme}://oauth?`) ||
+      value.startsWith(`${scheme}://oauth/`),
+  );
+}
+
 export function isSafeAppRedirect(redirect: string, options?: { appUrl?: string; allowlist?: string }): boolean {
   const value = redirect.trim();
   if (!value) return false;
 
-  if (value === 'unify://oauth' || value.startsWith('unify://oauth?') || value.startsWith('unify://oauth/')) {
+  if (isNativeOAuthRedirect(value)) {
     return true;
   }
 

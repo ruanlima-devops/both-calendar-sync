@@ -1,7 +1,7 @@
 import { makeRedirectUri } from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
-import { APP_SCHEME } from '@/lib/app';
+import { LEGACY_APP_SCHEME } from '@/lib/app';
 import { AUTH_CALLBACK_PATH, createSessionFromUrl } from '@/lib/auth/callback';
 import {
   isCancelledAuth,
@@ -16,7 +16,8 @@ let inFlight = false;
 
 export function getAuthRedirectUri(): string {
   return makeRedirectUri({
-    scheme: APP_SCHEME,
+    // TODO(rebrand): switch to APP_SCHEME after STAGE/PROD OAuth migration.
+    scheme: LEGACY_APP_SCHEME,
     path: AUTH_CALLBACK_PATH,
   });
 }

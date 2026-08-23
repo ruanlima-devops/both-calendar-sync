@@ -1,5 +1,5 @@
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import { UnifyLogo } from '@/components/brand/UnifyLogo';
+import { BothLogo } from '@/components/brand/BothLogo';
 import { usePreferredColorScheme } from '@/hooks/usePreferredColorScheme';
 import { schemeTokens, space } from '@/lib/theme';
 
@@ -10,9 +10,9 @@ export function SessionSplash() {
     <View
       style={[styles.root, { backgroundColor: colors.bg }]}
       accessibilityRole="progressbar"
-      accessibilityLabel="Carregando o Unify"
+      accessibilityLabel="Carregando o Both"
     >
-      <UnifyLogo colors={colors} />
+      <BothLogo colors={colors} />
       <ActivityIndicator color={colors.muted} style={styles.spinner} />
     </View>
   );

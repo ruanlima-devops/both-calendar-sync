@@ -111,7 +111,7 @@ export async function applySubscriptionDeleted(db: SupabaseClient, userId: strin
 
 /**
  * App Store / Play Billing via RevenueCat webhook.
- * Does not create a second trial — Unify trial remains internal until purchase.
+ * Does not create a second trial — Both trial remains internal until purchase.
  */
 export async function applyStoreEntitlement(
   db: SupabaseClient,
