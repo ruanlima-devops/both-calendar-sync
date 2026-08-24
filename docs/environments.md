@@ -2,6 +2,8 @@
 
 O repositório GitHub é único. Os backends Supabase de STAGE e PROD são projetos separados e não compartilham banco, usuários nem secrets.
 
+O projeto antigo da conta pessoal permanece congelado como rollback. O STAGE ativo do Both é um projeto novo, criado na organization Both, bootstrapado somente a partir do Git.
+
 ```text
                     BOTH
                      │
@@ -11,14 +13,13 @@ O repositório GitHub é único. Os backends Supabase de STAGE e PROD são proje
                      │
                   develop
                      │
-                     ▼
-              SUPABASE STAGE
-              (projeto remoto atual)
-                     │
-                     ▼
-              [NOVO PROJETO]
-                 BOTH PROD
-                   PENDING
+          ┌─────────┴─────────┐
+          ▼                   ▼
+   LEGACY STAGE          BOTH STAGE
+   (frozen rollback)     (ativo)
+          │
+          └────── BOTH PROD
+                    PENDING
 ```
 
 ## DEV
@@ -40,12 +41,36 @@ Scheme:
 both-dev
 
 Backend:
-desenvolvimento local e/ou STAGE durante a fase atual
+desenvolvimento local e/ou BOTH STAGE durante a fase atual
 ```
 
 O app local também registra o scheme legado `unify` para não quebrar o OAuth nativo atual.
 
-## STAGE
+## LEGACY STAGE
+
+```text
+Project:
+unify-dev
+
+Project Ref:
+sknpqjodttkpttaytdut
+
+Region:
+sa-east-1
+
+Status:
+Frozen / rollback reference
+
+Ownership:
+legacy account
+
+Role:
+LEGACY STAGE / ROLLBACK ONLY
+```
+
+Não alterar schema, functions, secrets, usuários ou dados deste projeto.
+
+## BOTH STAGE
 
 ```text
 Git:
@@ -63,23 +88,28 @@ com.bothcalendarsync.app.staging
 Scheme:
 both-stg
 
-Supabase:
-projeto remoto atual (hoje ainda com display name unify-dev)
+Project:
+Both STAGE
 
-Supabase Project Ref:
-sknpqjodttkpttaytdut
+Project Ref:
+qszggrrjhcwltnmxpxcy
 
 Region:
 sa-east-1
 
 Organization slug:
-kugrkrmotjtjkokcxkit
+otaqdspnjsewiymnqbmr
 
-Remote display name rename:
-PENDING (ainda unify-dev)
+Status:
+Active staging environment
+
+Ownership:
+Both organization
 ```
 
-O `project_id` em `supabase/config.toml` (`both-stage`) identifica só o ambiente local do CLI. Não é o Project Ref remoto. O vínculo remoto continua o mesmo; nenhum `supabase link` novo foi executado nesta fase.
+O `project_id` em `supabase/config.toml` (`both-stage`) identifica só o ambiente local do CLI. Não é o Project Ref remoto.
+
+O repositório está linked ao BOTH STAGE (`qszggrrjhcwltnmxpxcy`). Integrações externas (Auth providers, Calendar OAuth, email, billing, crons) ainda estão PENDING.
 
 ## PROD
 
@@ -106,11 +136,11 @@ PROD Project Ref:
 PENDING
 ```
 
-PROD deve nascer com schema, RLS, functions e secrets próprios. Não deve receber usuários, tokens, eventos, webhooks, notificações ou billing records de STAGE.
+PROD deve nascer com a mesma receita do BOTH STAGE: schema, RLS, functions e secrets próprios. Não deve receber usuários, tokens, eventos, webhooks, notificações ou billing records de STAGE nem do legado.
 
 ## Segregação obrigatória
 
-Nunca compartilhar entre STAGE e PROD:
+Nunca compartilhar entre LEGACY STAGE, BOTH STAGE e PROD:
 
 - projeto Supabase
 - database
