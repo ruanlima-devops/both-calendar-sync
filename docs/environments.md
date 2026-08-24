@@ -44,7 +44,7 @@ Backend:
 desenvolvimento local e/ou BOTH STAGE durante a fase atual
 ```
 
-O app local também registra o scheme legado `unify` para não quebrar o OAuth nativo atual.
+O app local também registra o scheme legado `unify` para **aceitar** deep links antigos. Os callbacks **gerados** passam a ser `both-dev://`, `both-stg://` e `both://`.
 
 ## LEGACY STAGE
 
@@ -109,7 +109,7 @@ Both organization
 
 O `project_id` em `supabase/config.toml` (`both-stage`) identifica só o ambiente local do CLI. Não é o Project Ref remoto.
 
-O repositório está linked ao BOTH STAGE (`qszggrrjhcwltnmxpxcy`). Integrações externas (Auth providers, Calendar OAuth, email, billing, crons) ainda estão PENDING.
+O repositório está linked ao BOTH STAGE (`qszggrrjhcwltnmxpxcy`). Auth Google, Calendar OAuth, email, billing e crons continuam PENDING até o setup manual em `docs/stage-integrations-setup.md`.
 
 ## PROD
 

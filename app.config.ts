@@ -31,7 +31,7 @@ function resolveVariant(): AppVariant {
 export default ({ config }: ConfigContext): ExpoConfig => {
   const variant = resolveVariant();
   const current = VARIANTS[variant];
-  // TODO(rebrand): remove legacy `unify` scheme after STAGE/PROD OAuth migration.
+  // Incoming `unify` remains registered; generated OAuth callbacks use `current.scheme`.
   const schemes = [current.scheme, LEGACY_SCHEME];
 
   return {
@@ -119,7 +119,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     extra: {
       appVariant: variant,
       appScheme: current.scheme,
-      // TODO(rebrand): remove legacy `unify` scheme after STAGE/PROD OAuth migration.
+      // Incoming deep links may still use `unify`; generated callbacks use appScheme.
       legacyAppScheme: LEGACY_SCHEME,
       bundleIdentifier: current.bundleId,
       appUrl: process.env.EXPO_PUBLIC_APP_URL ?? process.env.APP_URL ?? '',

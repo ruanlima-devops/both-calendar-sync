@@ -70,3 +70,9 @@ verify_jwt = true
 
 [functions.icloud-poll]
 verify_jwt = false
+
+[functions.billing-revenuecat]
+verify_jwt = false
+
+[functions.disconnect-calendar]
+verify_jwt = true

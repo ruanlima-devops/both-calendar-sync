@@ -1,9 +1,21 @@
 import { createClient } from '@supabase/supabase-js';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { createAuthStorage } from '@/lib/auth/storage';
+import { environmentWarnings } from '@/lib/environment';
 
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const anon = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+
+if (__DEV__) {
+  const extra = (Constants.expoConfig?.extra ?? {}) as { appVariant?: string };
+  for (const warning of environmentWarnings({
+    variant: extra.appVariant ?? process.env.APP_VARIANT,
+    supabaseUrl: url,
+  })) {
+    console.warn(`[both-env] ${warning}`);
+  }
+}
 
 const isWebServer = Platform.OS === 'web' && typeof window === 'undefined';
 
