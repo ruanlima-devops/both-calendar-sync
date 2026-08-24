@@ -1,0 +1,85 @@
+name: Deploy STAGE
+
+on:
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: both-stage-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Supabase STAGE
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.115.0
+
+      - name: Preflight credentials and target guard
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          test -n "$SUPABASE_DB_PASSWORD"
+          test -n "$SUPABASE_PROJECT_REF"
+          if [ "$SUPABASE_PROJECT_REF" != "qszggrrjhcwltnmxpxcy" ]; then
+            echo "ERROR: unexpected STAGE project ref"
+            exit 1
+          fi
+          if [ "$SUPABASE_PROJECT_REF" = "sknpqjodttkpttaytdut" ]; then
+            echo "ERROR: legacy project deployment prohibited"
+            exit 1
+          fi
+
+      - name: Link Both STAGE
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF" --yes
+
+      - name: Migration list
+        run: supabase migration list
+
+      - name: Migration dry-run
+        run: supabase db push --dry-run
+
+      - name: Apply migrations
+        run: supabase db push
+
+      - name: Verify migrations
+        run: |
+          set -euo pipefail
+          output="$(supabase db push --dry-run 2>&1)"
+          printf '%s\n' "$output"
+          if ! printf '%s\n' "$output" | grep -qi 'up to date'; then
+            echo "ERROR: remote database is not up to date after deploy"
+            exit 1
+          fi
+
+      - name: Deploy Edge Functions
+        run: supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: List Edge Functions
+        run: |
+          supabase functions list --project-ref "$SUPABASE_PROJECT_REF"
+          echo "Local function directories:"
+          find supabase/functions \
+            -mindepth 1 \
+            -maxdepth 1 \
+            -type d \
+            ! -name "_shared" \
+            | sort
