@@ -229,20 +229,32 @@ export function oauthResultPage(input: {
       error: input.ok ? null : (input.error ?? 'oauth_failed'),
     };
     const html = `<!DOCTYPE html>
-<html lang="pt-BR"><head><meta charset="utf-8"><title>${escapeHtml(input.title)}</title></head>
-<body><p>${escapeHtml(input.message)}</p><script>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>${escapeHtml(input.title)}</title>
+<meta http-equiv="refresh" content="0;url=${escapeHtml(redirect)}"></head>
+<body><p>${escapeHtml(input.message)}</p>
+<p><a href="${escapeHtml(redirect)}">Continuar para o Both</a></p>
+<script>
 (function () {
   var payload = ${JSON.stringify(payload)};
   var fallback = ${JSON.stringify(redirect)};
   var targetOrigin = ${JSON.stringify(targetOrigin)};
-  if (window.opener && !window.opener.closed) {
+  function notifyOpener() {
+    if (!window.opener || window.opener.closed) return false;
     try {
       window.opener.postMessage(payload, targetOrigin === '*' ? '*' : targetOrigin);
       window.close();
-      return;
+      return true;
     } catch (e) {}
+    try {
+      window.opener.postMessage(payload, '*');
+      window.close();
+      return true;
+    } catch (e2) {}
+    return false;
   }
-  window.location.replace(fallback);
+  if (!notifyOpener()) {
+    window.location.replace(fallback);
+  }
 })();
 </script></body></html>`;
     return new Response(html, {

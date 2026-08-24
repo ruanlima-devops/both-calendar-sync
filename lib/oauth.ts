@@ -3,17 +3,26 @@ import * as Linking from 'expo-linking';
 import { makeRedirectUri } from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { APP_SCHEME, OAUTH_PATH } from '@/lib/app';
+import {
+  consumeOAuthComplete,
+  OAUTH_MESSAGE_TYPE,
+  type OAuthCompletePayload,
+} from '@/lib/oauth-complete';
 import { invokeFunction } from '@/lib/supabase';
 
 WebBrowser.maybeCompleteAuthSession();
 
 const USER_ERROR = 'Não foi possível conectar o calendário. Tente novamente.';
-const MESSAGE_TYPE = 'unify-calendar-oauth';
+const WEB_OAUTH_TIMEOUT_MS = 120_000;
+const WEB_POPUP_BLOCKED =
+  'Permita pop-ups neste site para conectar calendários (Both → Configurações do navegador).';
 
 type OAuthFunctionResponse = {
   authorizationUrl?: string;
   error?: string;
 };
+
+type PopupResult = { outcome: 'ok' | 'error' | 'cancel'; error?: string | null };
 
 /** Return URL registered in oauth_states and matched after provider callback. */
 export function getCalendarOAuthRedirectUri(): string {
@@ -43,28 +52,49 @@ function supabaseOrigin(): string | null {
   }
 }
 
-const WEB_OAUTH_TIMEOUT_MS = 120_000;
+function openWebOAuthPopup(url: string): Window | null {
+  if (typeof window === 'undefined') return null;
+  const width = 520;
+  const height = 720;
+  const left = window.screenX + Math.max(0, (window.outerWidth - width) / 2);
+  const top = window.screenY + Math.max(0, (window.outerHeight - height) / 2);
+  return window.open(
+    url,
+    'both-calendar-oauth',
+    `popup=yes,toolbar=no,menubar=no,width=${width},height=${height},left=${left},top=${top}`,
+  );
+}
 
-function waitForPopupResult(provider: 'google' | 'microsoft'): {
-  promise: Promise<{ outcome: 'ok' | 'error' | 'cancel'; error?: string | null }>;
-  stop: () => void;
-} {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') {
-    return { promise: new Promise(() => {}), stop() {} };
+function payloadToResult(payload: OAuthCompletePayload, provider: 'google' | 'microsoft'): PopupResult {
+  if (payload.provider && payload.provider !== provider) {
+    return { outcome: 'error', error: 'provider_mismatch' };
   }
+  if (payload.ok) return { outcome: 'ok' };
+  if (payload.error === 'access_denied') return { outcome: 'cancel' };
+  return { outcome: 'error', error: payload.error };
+}
+
+function waitForWebOAuthResult(
+  provider: 'google' | 'microsoft',
+  popupWindow: Window | null,
+): { promise: Promise<PopupResult>; stop: () => void } {
   const allowed = allowedMessageOrigins();
+  let storageTimer: number | undefined;
+  let popupTimer: number | undefined;
   let stop = () => {};
-  const promise = new Promise<{ outcome: 'ok' | 'error' | 'cancel'; error?: string | null }>(
-    (resolve, reject) => {
+
+  const promise = new Promise<PopupResult>((resolve, reject) => {
     const timeout = window.setTimeout(() => {
-      window.removeEventListener('message', onMessage);
+      cleanup();
       reject(new Error(USER_ERROR));
     }, WEB_OAUTH_TIMEOUT_MS);
-    const finish = (outcome: 'ok' | 'error' | 'cancel', error?: string | null) => {
+
+    const finish = (result: PopupResult) => {
+      cleanup();
       window.clearTimeout(timeout);
-      window.removeEventListener('message', onMessage);
-      resolve({ outcome, error: error ?? null });
+      resolve(result);
     };
+
     const onMessage = (event: MessageEvent) => {
       if (allowed.size > 0 && !allowed.has(event.origin)) return;
       const data = event.data as {
@@ -73,19 +103,53 @@ function waitForPopupResult(provider: 'google' | 'microsoft'): {
         provider?: string;
         error?: string | null;
       } | null;
-      if (!data || data.type !== MESSAGE_TYPE) return;
+      if (!data || data.type !== OAUTH_MESSAGE_TYPE) return;
       if (data.provider && data.provider !== provider) return;
-      if (data.ok) finish('ok');
-      else if (data.error === 'access_denied') finish('cancel');
-      else finish('error', data.error ?? null);
+      try {
+        popupWindow?.close();
+      } catch {
+        /* ignore */
+      }
+      finish(payloadToResult({
+        ok: Boolean(data.ok),
+        provider: (data.provider as OAuthCompletePayload['provider']) ?? provider,
+        error: data.error ?? null,
+      }, provider));
     };
-    window.addEventListener('message', onMessage);
-    stop = () => {
-      window.clearTimeout(timeout);
+
+    storageTimer = window.setInterval(() => {
+      const payload = consumeOAuthComplete();
+      if (!payload) return;
+      try {
+        popupWindow?.close();
+      } catch {
+        /* ignore */
+      }
+      finish(payloadToResult(payload, provider));
+    }, 250);
+
+    if (popupWindow) {
+      popupTimer = window.setInterval(() => {
+        if (!popupWindow.closed) return;
+        const payload = consumeOAuthComplete();
+        if (payload) {
+          finish(payloadToResult(payload, provider));
+          return;
+        }
+        finish({ outcome: 'cancel' });
+      }, 400);
+    }
+
+    function cleanup() {
       window.removeEventListener('message', onMessage);
-    };
-  },
-  );
+      if (storageTimer !== undefined) window.clearInterval(storageTimer);
+      if (popupTimer !== undefined) window.clearInterval(popupTimer);
+    }
+
+    window.addEventListener('message', onMessage);
+    stop = cleanup;
+  });
+
   return { promise, stop };
 }
 
@@ -109,9 +173,8 @@ function outcomeFromUrl(url: string): 'ok' | 'error' | 'cancel' {
 
 /**
  * Connect Google/Microsoft Calendar.
- * Web: popup + postMessage race (existing).
+ * Web: dedicated popup + postMessage/localStorage bridge.
  * Native: secure browser → variant scheme (`both-dev` / `both-stg` / `both`) `://oauth`.
- * Incoming `unify://oauth` is still accepted for legacy builds.
  */
 export async function connectCalendar(provider: 'google' | 'microsoft'): Promise<void> {
   const redirect = getCalendarOAuthRedirectUri();
@@ -121,27 +184,30 @@ export async function connectCalendar(provider: 'google' | 'microsoft'): Promise
     throw new Error(data.error ?? USER_ERROR);
   }
 
-  const popup = waitForPopupResult(provider);
-  let popupError: string | null = null;
-
   let outcome: 'ok' | 'error' | 'cancel' = 'ok';
+  let popupError: string | null = null;
   let callbackUrl: string | undefined;
-  try {
-    if (Platform.OS === 'web') {
-      void WebBrowser.openAuthSessionAsync(authorizationUrl, redirect);
-      const result = await popup.promise;
+
+  if (Platform.OS === 'web') {
+    const popupWindow = openWebOAuthPopup(authorizationUrl);
+    if (!popupWindow) {
+      throw new Error(WEB_POPUP_BLOCKED);
+    }
+    const waiter = waitForWebOAuthResult(provider, popupWindow);
+    try {
+      const result = await waiter.promise;
       outcome = result.outcome;
       popupError = result.error ?? null;
-    } else {
-      const session = await WebBrowser.openAuthSessionAsync(authorizationUrl, redirect);
-      if (session.type === 'cancel' || session.type === 'dismiss') outcome = 'cancel';
-      else if (session.type === 'success' && session.url) {
-        callbackUrl = session.url;
-        outcome = outcomeFromUrl(session.url);
-      } else outcome = 'error';
+    } finally {
+      waiter.stop();
     }
-  } finally {
-    popup.stop();
+  } else {
+    const session = await WebBrowser.openAuthSessionAsync(authorizationUrl, redirect);
+    if (session.type === 'cancel' || session.type === 'dismiss') outcome = 'cancel';
+    else if (session.type === 'success' && session.url) {
+      callbackUrl = session.url;
+      outcome = outcomeFromUrl(session.url);
+    } else outcome = 'error';
   }
 
   if (outcome === 'cancel') return;

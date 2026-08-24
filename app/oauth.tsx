@@ -1,8 +1,11 @@
 import { useEffect } from 'react';
 import { ActivityIndicator, Alert, Platform, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-
-const MESSAGE_TYPE = 'unify-calendar-oauth';
+import {
+  notifyOAuthOpener,
+  persistOAuthComplete,
+  type OAuthCompletePayload,
+} from '@/lib/oauth-complete';
 
 export default function OAuthComplete() {
   const router = useRouter();
@@ -12,21 +15,20 @@ export default function OAuthComplete() {
     const error = Array.isArray(params.oauth_error) ? params.oauth_error[0] : params.oauth_error;
     const connected = Array.isArray(params.connected) ? params.connected[0] : params.connected;
     const providerParam = Array.isArray(params.provider) ? params.provider[0] : params.provider;
-    const provider = connected ?? providerParam ?? null;
-    const ok = !error;
+    const provider = (connected ?? providerParam ?? null) as OAuthCompletePayload['provider'];
+    const payload: OAuthCompletePayload = {
+      ok: !error,
+      provider,
+      error: error ?? null,
+    };
 
-    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.opener && window.opener !== window) {
-      window.opener.postMessage(
-        {
-          type: MESSAGE_TYPE,
-          ok,
-          provider,
-          error: error ?? null,
-        },
-        window.location.origin,
-      );
-      window.close();
-      return;
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      persistOAuthComplete(payload);
+      const delivered = notifyOAuthOpener(payload);
+      if (delivered) {
+        window.close();
+        return;
+      }
     }
 
     if (error && error !== 'access_denied') {
