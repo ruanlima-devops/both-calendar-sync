@@ -43,8 +43,10 @@ function supabaseOrigin(): string | null {
   }
 }
 
+const WEB_OAUTH_TIMEOUT_MS = 120_000;
+
 function waitForPopupResult(provider: 'google' | 'microsoft'): {
-  promise: Promise<'ok' | 'error' | 'cancel'>;
+  promise: Promise<{ outcome: 'ok' | 'error' | 'cancel'; error?: string | null }>;
   stop: () => void;
 } {
   if (Platform.OS !== 'web' || typeof window === 'undefined') {
@@ -52,7 +54,17 @@ function waitForPopupResult(provider: 'google' | 'microsoft'): {
   }
   const allowed = allowedMessageOrigins();
   let stop = () => {};
-  const promise = new Promise<'ok' | 'error' | 'cancel'>((resolve) => {
+  const promise = new Promise<{ outcome: 'ok' | 'error' | 'cancel'; error?: string | null }>(
+    (resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      window.removeEventListener('message', onMessage);
+      reject(new Error(USER_ERROR));
+    }, WEB_OAUTH_TIMEOUT_MS);
+    const finish = (outcome: 'ok' | 'error' | 'cancel', error?: string | null) => {
+      window.clearTimeout(timeout);
+      window.removeEventListener('message', onMessage);
+      resolve({ outcome, error: error ?? null });
+    };
     const onMessage = (event: MessageEvent) => {
       if (allowed.size > 0 && !allowed.has(event.origin)) return;
       const data = event.data as {
@@ -63,14 +75,17 @@ function waitForPopupResult(provider: 'google' | 'microsoft'): {
       } | null;
       if (!data || data.type !== MESSAGE_TYPE) return;
       if (data.provider && data.provider !== provider) return;
-      window.removeEventListener('message', onMessage);
-      if (data.ok) resolve('ok');
-      else if (data.error === 'access_denied') resolve('cancel');
-      else resolve('error');
+      if (data.ok) finish('ok');
+      else if (data.error === 'access_denied') finish('cancel');
+      else finish('error', data.error ?? null);
     };
     window.addEventListener('message', onMessage);
-    stop = () => window.removeEventListener('message', onMessage);
-  });
+    stop = () => {
+      window.clearTimeout(timeout);
+      window.removeEventListener('message', onMessage);
+    };
+  },
+  );
   return { promise, stop };
 }
 
@@ -107,29 +122,22 @@ export async function connectCalendar(provider: 'google' | 'microsoft'): Promise
   }
 
   const popup = waitForPopupResult(provider);
-  const session = WebBrowser.openAuthSessionAsync(authorizationUrl, redirect);
+  let popupError: string | null = null;
 
   let outcome: 'ok' | 'error' | 'cancel' = 'ok';
   let callbackUrl: string | undefined;
   try {
     if (Platform.OS === 'web') {
-      outcome = await Promise.race([
-        popup.promise,
-        session.then((result) => {
-          if (result.type === 'cancel' || result.type === 'dismiss') return 'cancel' as const;
-          if (result.type === 'success' && result.url) {
-            callbackUrl = result.url;
-            return outcomeFromUrl(result.url);
-          }
-          return 'error' as const;
-        }),
-      ]);
+      void WebBrowser.openAuthSessionAsync(authorizationUrl, redirect);
+      const result = await popup.promise;
+      outcome = result.outcome;
+      popupError = result.error ?? null;
     } else {
-      const result = await session;
-      if (result.type === 'cancel' || result.type === 'dismiss') outcome = 'cancel';
-      else if (result.type === 'success' && result.url) {
-        callbackUrl = result.url;
-        outcome = outcomeFromUrl(result.url);
+      const session = await WebBrowser.openAuthSessionAsync(authorizationUrl, redirect);
+      if (session.type === 'cancel' || session.type === 'dismiss') outcome = 'cancel';
+      else if (session.type === 'success' && session.url) {
+        callbackUrl = session.url;
+        outcome = outcomeFromUrl(session.url);
       } else outcome = 'error';
     }
   } finally {
@@ -138,7 +146,7 @@ export async function connectCalendar(provider: 'google' | 'microsoft'): Promise
 
   if (outcome === 'cancel') return;
   if (outcome === 'error') {
-    const detail = callbackUrl ? errorFromUrl(callbackUrl) : null;
+    const detail = popupError ?? (callbackUrl ? errorFromUrl(callbackUrl) : null);
     throw new Error(detail ?? USER_ERROR);
   }
 }

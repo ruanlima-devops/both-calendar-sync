@@ -214,6 +214,47 @@ export function oauthResultPage(input: {
       ? `connected=${input.provider}`
       : `oauth_error=${input.error ?? 'oauth_failed'}&provider=${input.provider}`,
   );
+
+  if (isWebPopupReturn(input.redirectTo)) {
+    let targetOrigin = '*';
+    try {
+      targetOrigin = new URL(input.redirectTo).origin;
+    } catch {
+      /* keep wildcard fallback */
+    }
+    const payload = {
+      type: 'unify-calendar-oauth',
+      ok: input.ok,
+      provider: input.provider,
+      error: input.ok ? null : (input.error ?? 'oauth_failed'),
+    };
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>${escapeHtml(input.title)}</title></head>
+<body><p>${escapeHtml(input.message)}</p><script>
+(function () {
+  var payload = ${JSON.stringify(payload)};
+  var fallback = ${JSON.stringify(redirect)};
+  var targetOrigin = ${JSON.stringify(targetOrigin)};
+  if (window.opener && !window.opener.closed) {
+    try {
+      window.opener.postMessage(payload, targetOrigin === '*' ? '*' : targetOrigin);
+      window.close();
+      return;
+    } catch (e) {}
+  }
+  window.location.replace(fallback);
+})();
+</script></body></html>`;
+    return new Response(html, {
+      status: 200,
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store',
+      },
+    });
+  }
+
   try {
     return Response.redirect(redirect, 302);
   } catch {
@@ -222,6 +263,30 @@ export function oauthResultPage(input: {
       headers: { ...corsHeaders, Location: redirect, 'Cache-Control': 'no-store' },
     });
   }
+}
+
+function isWebPopupReturn(url: string): boolean {
+  try {
+    const parsed = new URL(url.trim());
+    if (parsed.protocol === 'exp:' || parsed.protocol === 'exps:') return true;
+    if (
+      (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+      (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1')
+    ) {
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
 }
 
 export function assertMicrosoftClientId(clientId: string): void {
