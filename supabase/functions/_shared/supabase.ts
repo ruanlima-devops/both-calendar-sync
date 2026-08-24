@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2';
+import { cronSecretMatches } from './auth-guards.ts';
 import { env } from './http.ts';
 
 export function adminClient(): SupabaseClient {
@@ -18,9 +19,5 @@ export async function userFromRequest(req: Request): Promise<{ userId: string; t
 }
 
 export function cronAuthorized(req: Request): boolean {
-  const secret = Deno.env.get('CRON_SECRET');
-  if (!secret) return false;
-  const header = req.headers.get('x-cron-secret') ?? '';
-  const bearer = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
-  return header === secret || bearer === secret;
+  return cronSecretMatches(req, Deno.env.get('CRON_SECRET'));
 }

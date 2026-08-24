@@ -11,8 +11,7 @@ const extra = (Constants.expoConfig?.extra ?? {}) as Extra;
 export const APP_SCHEME = extra.appScheme ?? 'both-dev';
 
 /**
- * TODO(rebrand): remove legacy `unify` scheme after STAGE/PROD OAuth migration.
- * Native OAuth callbacks still use this scheme so existing remote allowlists keep working.
+ * Accepted for incoming deep links from older builds. Not used when generating callbacks.
  */
 export const LEGACY_APP_SCHEME = 'unify';
 

@@ -292,14 +292,16 @@ Google:
 - Edge Function `google-oauth`
 - Secrets: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `GOOGLE_WEBHOOK_URL`
 - Redirect: `https://<project-ref>.supabase.co/functions/v1/google-oauth`
-- App callback legado: `unify://oauth`
+- App callback gerado: `{scheme}://oauth` (`both-dev` / `both-stg` / `both`)
+- Incoming legado ainda aceito: `unify://oauth`
 
 Microsoft:
 
 - Edge Function `microsoft-oauth`
 - Secrets: `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `MICROSOFT_TENANT`, `MICROSOFT_REDIRECT_URI`, `MICROSOFT_WEBHOOK_URL`
 - Redirect: `https://<project-ref>.supabase.co/functions/v1/microsoft-oauth`
-- App callback legado: `unify://oauth`
+- App callback gerado: `{scheme}://oauth` (`both-dev` / `both-stg` / `both`)
+- Incoming legado ainda aceito: `unify://oauth`
 
 iCloud:
 

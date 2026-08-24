@@ -45,9 +45,9 @@ function isNativeOAuthRedirect(value: string): boolean {
 }
 
 export function defaultAppRedirect(): string {
-  // Keep unify:// fallback so currently deployed APP_URL-less configs still resolve.
-  // TODO(rebrand): remove legacy `unify` scheme after STAGE/PROD OAuth migration.
-  return envOptional('APP_URL') ?? 'unify://oauth';
+  const appUrl = envOptional('APP_URL');
+  if (appUrl) return appUrl;
+  throw new Error('invalid_oauth_redirect');
 }
 
 /** Prevent open redirects after calendar OAuth. */
