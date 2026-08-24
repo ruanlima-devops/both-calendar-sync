@@ -9,6 +9,7 @@ import { useSession } from '@/context/session';
 import { useToast } from '@/context/toast';
 import { friendlyError } from '@/lib/errors';
 import { connectCalendar } from '@/lib/oauth';
+import { consumeOAuthComplete } from '@/lib/oauth-complete';
 import { invokeFunction, supabase } from '@/lib/supabase';
 import { space } from '@/lib/theme';
 import type { ConnectedCalendar, CalendarConnection, ProviderName } from '@/lib/types';
@@ -65,7 +66,14 @@ export default function CalendarsScreen() {
     setCalendars((cals ?? []) as ConnectedCalendar[]);
   }, []);
 
-  useFocusEffect(useCallback(() => { void load(); }, [load]));
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+      const completed = consumeOAuthComplete();
+      if (!completed?.ok || !completed.provider) return;
+      showToast(completed.provider === 'microsoft' ? 'Microsoft conectado' : 'Google conectado');
+    }, [load, showToast]),
+  );
 
   useEffect(() => {
     void invokeFunction('sync-now', { ensureWatchesOnly: true }).catch(() => {});
@@ -76,6 +84,16 @@ export default function CalendarsScreen() {
     setConnecting(provider);
     try {
       await connectCalendar(provider);
+      const providerCode = provider === 'google' ? 'GOOGLE' : 'MICROSOFT';
+      const { data: cons, error } = await supabase
+        .from('calendar_connections')
+        .select('*')
+        .eq('provider', providerCode);
+      if (error) throw error;
+      const connected = (cons ?? []).some((row) => row.status === 'CONNECTED');
+      if (!connected) {
+        throw new Error('A autorização terminou, mas a conexão não foi salva. Tente novamente.');
+      }
       await load();
       showToast(provider === 'microsoft' ? 'Microsoft conectado' : 'Google conectado');
     } catch (err) {

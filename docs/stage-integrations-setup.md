@@ -306,6 +306,38 @@ Legacy: no
 - Cron schedules (`icloud-poll`, `renew-subscriptions`, `reconcile-sync`, `send-email-digest`)
 - Both PROD project
 
+---
+
+## Troubleshooting
+
+### Google Calendar — `redirect_uri_mismatch`
+
+Login Google (Supabase Auth) and Google Calendar use **different OAuth clients**.
+
+| Flow | OAuth client | Redirect URI |
+|---|---|---|
+| Login | Both STAGE **Auth** | `https://qszggrrjhcwltnmxpxcy.supabase.co/auth/v1/callback` |
+| Calendar | Both STAGE **Calendar** | `https://qszggrrjhcwltnmxpxcy.supabase.co/functions/v1/google-oauth` |
+
+If login works but calendar connect fails with `redirect_uri_mismatch`:
+
+1. Google Cloud Console → **Credentials** → open **Both STAGE Calendar** (not Auth).
+2. Under **Authorized redirect URIs**, add exactly:
+   `https://qszggrrjhcwltnmxpxcy.supabase.co/functions/v1/google-oauth`
+3. Confirm Supabase Edge secret `GOOGLE_CLIENT_ID` is the **Calendar** client ID (same client as step 2).
+4. Click **Save** in Google Cloud and wait ~1 minute before retrying.
+
+On the Google error screen, open **error details** to see the exact `redirect_uri` sent.
+
+### Microsoft Calendar — web popup closes but nothing connects
+
+On web, the callback lands on `http://localhost:8081/oauth`. The app must notify the opener window.
+
+After pulling the latest code, restart `npm run web --clear` and retry.
+
+If it still fails, confirm Entra redirect URI is exactly:
+`https://qszggrrjhcwltnmxpxcy.supabase.co/functions/v1/microsoft-oauth`
+
 - Apple Auth
 - Stripe
 - RevenueCat secrets / dashboard webhook
