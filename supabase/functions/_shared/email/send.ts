@@ -38,7 +38,7 @@ export async function sendEmail(message: OutboundEmail): Promise<{ id?: string; 
 }
 
 export function appBaseUrl(): string {
-  return (envOptional('APP_URL') ?? 'https://unify.app').replace(/\/$/, '');
+  return env('APP_URL').replace(/\/$/, '');
 }
 
 export function accountPreferencesUrl(): string {
