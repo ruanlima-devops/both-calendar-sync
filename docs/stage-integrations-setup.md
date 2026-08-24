@@ -124,7 +124,7 @@ Application:
 Both STAGE Calendar
 
 Client:
-NEW GOOGLE CALENDAR CLIENT REQUIRED
+Both STAGE Calendar (created; secret values never in Git)
 
 Authorized redirect URI:
 https://qszggrrjhcwltnmxpxcy.supabase.co/functions/v1/google-oauth
@@ -160,7 +160,7 @@ https://www.googleapis.com/auth/calendar.calendarlist.readonly
 https://qszggrrjhcwltnmxpxcy.supabase.co/functions/v1/google-webhook
 ```
 
-Do not create watches until the new client is live.
+Watches are created at calendar connect time on Both STAGE. Do not reuse Legacy channel IDs.
 
 ---
 
@@ -171,7 +171,7 @@ Application:
 Both STAGE Calendar
 
 App registration:
-NEW MICROSOFT CALENDAR APP REQUIRED
+Both STAGE Calendar (created; secret values never in Git)
 
 Redirect URI (Web):
 https://qszggrrjhcwltnmxpxcy.supabase.co/functions/v1/microsoft-oauth
@@ -196,7 +196,7 @@ Calendars.ReadWrite
 https://qszggrrjhcwltnmxpxcy.supabase.co/functions/v1/microsoft-webhook
 ```
 
-Do not create Graph subscriptions until the new app is live.
+Graph subscriptions are created at calendar connect time on Both STAGE. Do not reuse Legacy subscription IDs.
 Do not enable Microsoft on Supabase Auth.
 
 ---
@@ -268,28 +268,43 @@ RESEND_FROM_EMAIL
 
 ---
 
-## Frontend cutover (not in this phase)
+## Frontend cutover (local)
 
-Public vars the app needs later (anon/publishable only):
+Local `.env` (gitignored) now targets Both STAGE:
 
 ```text
 EXPO_PUBLIC_SUPABASE_URL=https://qszggrrjhcwltnmxpxcy.supabase.co
-EXPO_PUBLIC_SUPABASE_ANON_KEY=<Both STAGE anon or publishable key>
+EXPO_PUBLIC_SUPABASE_ANON_KEY=<Both STAGE publishable/anon key>
 APP_VARIANT=preview
 ```
 
 Do not put `service_role` in the client.
-Do not switch `.env` until the new Google Auth client can complete login.
+Do not commit `.env`.
 
 Check without printing keys:
 
 ```bash
-npx tsx scripts/check-environment.ts
+npm run check:environment
+```
+
+Expected:
+
+```text
+Project Ref: qszggrrjhcwltnmxpxcy
+Legacy: no
 ```
 
 ---
 
 ## Intentionally pending
+
+- Live E2E on Both STAGE (Google login, Google/Microsoft calendar connect, Sync Now, webhooks)
+- Apple Auth
+- Stripe
+- RevenueCat secrets / dashboard webhook
+- Resend
+- Cron schedules (`icloud-poll`, `renew-subscriptions`, `reconcile-sync`, `send-email-digest`)
+- Both PROD project
 
 - Apple Auth
 - Stripe

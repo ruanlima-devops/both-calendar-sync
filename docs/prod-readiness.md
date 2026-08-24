@@ -8,9 +8,9 @@ Checklist operacional. Não contém secrets.
 - [x] Database migrations
 - [x] RLS/schema
 - [x] Edge Functions
-- [ ] Application secrets
-- [ ] Auth providers
-- [ ] Calendar OAuth
+- [x] Application secrets (calendar OAuth; billing/email still pending)
+- [x] Auth providers (Google on Supabase Auth; login E2E pending)
+- [x] Calendar OAuth (clients + Edge secrets; live connection E2E pending)
 - [ ] Email
 - [ ] Billing
 - [ ] Scheduled jobs
@@ -36,4 +36,4 @@ LEGACY STAGE congelado:
 - Project Ref: `sknpqjodttkpttaytdut`
 - Role: rollback only
 
-PROD ainda não deve ser criado até o BOTH STAGE autenticar, conectar calendários, receber webhooks e sincronizar.
+PROD ainda não deve ser criado até o BOTH STAGE autenticar, conectar calendários, receber webhooks e sincronizar (E2E desta fase ainda pendente).
