@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+  push:
+    branches:
+      - develop
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: true
+  EXPO_NO_TELEMETRY: 1
+
+jobs:
+  application:
+    name: Application
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      APP_VARIANT: preview
+      EXPO_PUBLIC_APP_URL: http://localhost:8081
+      EXPO_PUBLIC_SUPABASE_URL: https://qszggrrjhcwltnmxpxcy.supabase.co
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJub25lIn0.eyJpc3MiOiJzdXBhYmFzZS1jaSIsInJvbGUiOiJhbm9uIiwiZXhwIjoyOTk5OTk5OTk5fQ.ci-placeholder
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Tests
+        run: npm test
+      - name: TypeScript
+        run: npm run typecheck
+      - name: Expo config (development)
+        run: APP_VARIANT=development npx expo config --type public > "$RUNNER_TEMP/expo-development.json"
+      - name: Expo config (preview)
+        run: APP_VARIANT=preview npx expo config --type public > "$RUNNER_TEMP/expo-preview.json"
+      - name: Expo config (production)
+        run: APP_VARIANT=production npx expo config --type public > "$RUNNER_TEMP/expo-production.json"
+      - name: Expo preview web export
+        run: APP_VARIANT=preview npx expo export --platform web
+
+  supabase:
+    name: Supabase
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.115.0
+      - name: Start local database
+        run: supabase db start
+      - name: Reset from migrations
+        run: supabase db reset --local --no-seed --yes
+      - name: Lint database
+        run: supabase db lint --local --level error --fail-on error
+      - name: Stop Supabase
+        if: always()
+        run: supabase stop --no-backup

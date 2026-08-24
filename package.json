@@ -47,6 +47,7 @@
     "web": "expo start --web",
     "test": "vitest run",
     "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
     "eas:dev:ios": "eas build --platform ios --profile development",
     "eas:dev:android": "eas build --platform android --profile development",
     "eas:preview:ios": "eas build --platform ios --profile preview",
