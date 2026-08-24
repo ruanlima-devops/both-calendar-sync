@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import * as Linking from 'expo-linking';
+import { makeRedirectUri } from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { APP_SCHEME, OAUTH_PATH } from '@/lib/app';
 import { invokeFunction } from '@/lib/supabase';
@@ -13,6 +14,24 @@ type OAuthFunctionResponse = {
   authorizationUrl?: string;
   error?: string;
 };
+
+/** Return URL registered in oauth_states and matched after provider callback. */
+export function getCalendarOAuthRedirectUri(): string {
+  if (Platform.OS === 'web') {
+    return makeRedirectUri({ path: OAUTH_PATH });
+  }
+  return Linking.createURL(OAUTH_PATH, { scheme: APP_SCHEME });
+}
+
+function allowedMessageOrigins(): Set<string> {
+  const origins = new Set<string>();
+  if (typeof window !== 'undefined') {
+    origins.add(window.location.origin);
+  }
+  const supabase = supabaseOrigin();
+  if (supabase) origins.add(supabase);
+  return origins;
+}
 
 function supabaseOrigin(): string | null {
   const raw = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -31,11 +50,11 @@ function waitForPopupResult(provider: 'google' | 'microsoft'): {
   if (Platform.OS !== 'web' || typeof window === 'undefined') {
     return { promise: new Promise(() => {}), stop() {} };
   }
-  const allowed = supabaseOrigin();
+  const allowed = allowedMessageOrigins();
   let stop = () => {};
   const promise = new Promise<'ok' | 'error' | 'cancel'>((resolve) => {
     const onMessage = (event: MessageEvent) => {
-      if (allowed && event.origin !== allowed) return;
+      if (allowed.size > 0 && !allowed.has(event.origin)) return;
       const data = event.data as {
         type?: string;
         ok?: boolean;
@@ -80,7 +99,7 @@ function outcomeFromUrl(url: string): 'ok' | 'error' | 'cancel' {
  * Incoming `unify://oauth` is still accepted for legacy builds.
  */
 export async function connectCalendar(provider: 'google' | 'microsoft'): Promise<void> {
-  const redirect = Linking.createURL(OAUTH_PATH, { scheme: APP_SCHEME });
+  const redirect = getCalendarOAuthRedirectUri();
   const data = await invokeFunction<OAuthFunctionResponse>(`${provider}-oauth`, { redirect });
   const authorizationUrl = data.authorizationUrl;
   if (!authorizationUrl) {

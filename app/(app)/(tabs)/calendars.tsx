@@ -76,6 +76,16 @@ export default function CalendarsScreen() {
     setConnecting(provider);
     try {
       await connectCalendar(provider);
+      const providerCode = provider === 'google' ? 'GOOGLE' : 'MICROSOFT';
+      const { data: cons, error } = await supabase
+        .from('calendar_connections')
+        .select('*')
+        .eq('provider', providerCode);
+      if (error) throw error;
+      const connected = (cons ?? []).some((row) => row.status === 'CONNECTED');
+      if (!connected) {
+        throw new Error('A autorização terminou, mas a conexão não foi salva. Tente novamente.');
+      }
       await load();
       showToast(provider === 'microsoft' ? 'Microsoft conectado' : 'Google conectado');
     } catch (err) {
