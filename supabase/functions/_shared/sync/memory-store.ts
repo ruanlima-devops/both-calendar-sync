@@ -150,6 +150,8 @@ export class RecordingActor {
   deletes: string[] = [];
   failCreates = false;
   failForCalendarIds = new Set<string>();
+  /** When set, updateEvent throws with this httpStatus (e.g. 404 = mirror gone). */
+  updateHttpStatus: number | null = null;
   private n = 0;
 
   async createEvent(target: { id: string; providerCalendarId: string }, input: { title: string; syncGroupId?: string }) {
@@ -160,6 +162,11 @@ export class RecordingActor {
   }
 
   async updateEvent(stored: { providerEventId: string }, input: { startAt: string }) {
+    if (this.updateHttpStatus != null) {
+      throw Object.assign(new Error(`provider_update_${this.updateHttpStatus}`), {
+        httpStatus: this.updateHttpStatus,
+      });
+    }
     this.updates.push({ providerEventId: stored.providerEventId, startAt: input.startAt });
   }
 

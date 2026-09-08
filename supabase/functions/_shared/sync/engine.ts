@@ -12,7 +12,7 @@ import {
   type TargetCalendar,
 } from './types.ts';
 import { optionalUuidOrNull } from './metadata.ts';
-import { buildMirrorAbandonmentKey } from './abandonment.ts';
+import { buildMirrorAbandonmentKey, isProviderGoneError } from './abandonment.ts';
 import {
   attachRecurringKind,
   canMirrorRecurringKind,
@@ -278,6 +278,12 @@ async function propagateOriginTimes(
       });
       result.updatedMirrors += 1;
     } catch (err) {
+      // Destination mirror deleted outside Both — record abandonment; do not recreate.
+      if (isProviderGoneError(err)) {
+        await store.markAbandoned(mirror.id);
+        result.skipped = result.skipped ?? 'mirror_deleted_externally';
+        continue;
+      }
       result.errors.push(`mirror_update_failed:${mirror.id}:${String(err)}`);
     }
   }

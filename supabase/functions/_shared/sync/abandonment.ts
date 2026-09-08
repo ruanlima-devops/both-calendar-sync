@@ -32,3 +32,10 @@ export function parseMirrorAbandonmentKey(originKey: string): MirrorAbandonmentK
   if (!originCalendarId || !originProviderEventId || !targetCalendarId) return null;
   return { originCalendarId, originProviderEventId, targetCalendarId };
 }
+
+/** Provider resource is gone (user deleted mirror externally, or already purged). */
+export function isProviderGoneError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const status = (err as { httpStatus?: unknown }).httpStatus;
+  return status === 404 || status === 410;
+}
