@@ -178,6 +178,22 @@ describe('wasMirrorAbandoned', () => {
     expect(actor.creates.length).toBe(createsAfterDelete);
   });
 
+  it('origin update 404 on mirror marks abandoned and does not recreate', async () => {
+    const { store, actor } = setup();
+    await applyIncomingEvent(ctx(), event(), store, actor);
+    actor.updateHttpStatus = 404;
+    const createsBefore = actor.creates.length;
+    await applyIncomingEvent(
+      ctx(),
+      event({ startAt: '2026-08-19T19:00:00.000Z', endAt: '2026-08-19T20:00:00.000Z' }),
+      store,
+      actor,
+    );
+    const mirror = [...store.events.values()].find((e) => e.eventRole === 'MIRROR')!;
+    expect(mirror.status).toBe('abandoned');
+    expect(actor.creates.length).toBe(createsBefore);
+  });
+
   it('normal mirror creation remains unaffected', async () => {
     const { store, actor } = setup();
     await applyIncomingEvent(ctx(), event(), store, actor);
