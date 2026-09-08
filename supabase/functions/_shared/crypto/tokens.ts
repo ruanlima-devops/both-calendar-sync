@@ -50,18 +50,45 @@ export function needsRefresh(expiresAtIso: string | null | undefined, now = new 
   return new Date(expiresAtIso).getTime() <= now.getTime() + skewMs;
 }
 
+const AUTH_OAUTH_CODES = new Set([
+  'invalid_grant',
+  'invalid_token',
+  'unauthorized_client',
+  'interaction_required',
+  'consent_required',
+  'login_required',
+  'expired_token',
+]);
+
 export function mapOAuthError(status: number, errorCode?: string): 'AUTH_REQUIRED' | 'ERROR' {
   if (status === 400 || status === 401) {
-    if (
-      errorCode === 'invalid_grant' ||
-      errorCode === 'invalid_token' ||
-      errorCode === 'unauthorized_client'
-    ) {
+    if (!errorCode || AUTH_OAUTH_CODES.has(errorCode)) {
       return 'AUTH_REQUIRED';
     }
+    // Token endpoint 400/401 without a known transient code still means re-auth.
     return 'AUTH_REQUIRED';
   }
   return 'ERROR';
+}
+
+/** True when refresh/API failure requires user reconnect (not rate-limit / outage). */
+export function isAuthRequiredError(err: unknown): boolean {
+  if (err && typeof err === 'object') {
+    const e = err as { status?: unknown; code?: unknown };
+    if (e.status === 'AUTH_REQUIRED' || e.code === 'AUTH_REQUIRED') return true;
+  }
+  const message = String(err instanceof Error ? err.message : err);
+  if (
+    message.includes('invalid_grant') ||
+    message.includes('invalid_token') ||
+    message.includes('icloud_auth_failed') ||
+    message.includes('interaction_required') ||
+    message.includes('consent_required')
+  ) {
+    return true;
+  }
+  // Common Microsoft identity revocation / expired grant codes in error text.
+  return /AADSTS(50173|70008|70000|700082|50076|50079)/i.test(message);
 }
 
 export async function sha256Hex(value: string): Promise<string> {

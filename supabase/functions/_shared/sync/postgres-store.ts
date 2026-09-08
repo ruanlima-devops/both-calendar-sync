@@ -1,4 +1,5 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
+import { buildMirrorAbandonmentKey, parseMirrorAbandonmentKey } from './abandonment.ts';
 import type { EventRole, EventStatus, StoredEvent, SyncStore } from './types.ts';
 
 function mapRow(row: Record<string, unknown>, connectionId = '', providerCalendarId = ''): StoredEvent {
@@ -161,15 +162,7 @@ export class PostgresStore implements SyncStore {
   }
 
   async wasMirrorAbandoned(calendarId: string, originKey: string): Promise<boolean> {
-    const { data } = await this.db
-      .from('calendar_events')
-      .select('id')
-      .eq('connected_calendar_id', calendarId)
-      .eq('event_role', 'MIRROR')
-      .eq('status', 'abandoned')
-      .contains('description', originKey)
-      .limit(1);
-    if (data && data.length > 0) return true;
+    // 1) Explicit audit trail written by markAbandoned (authoritative when present).
     const { data: logs } = await this.db
       .from('sync_log')
       .select('id')
@@ -177,7 +170,38 @@ export class PostgresStore implements SyncStore {
       .eq('operation', 'mirror_abandoned')
       .eq('detail', originKey)
       .limit(1);
-    return Boolean(logs && logs.length > 0);
+    if (logs && logs.length > 0) return true;
+
+    // 2) Structural: abandoned MIRROR on target calendar linked to matching ORIGIN via sync_group.
+    // Never infer abandonment from a temporarily missing provider observation / description text.
+    const parsed = parseMirrorAbandonmentKey(originKey);
+    if (!parsed || parsed.targetCalendarId !== calendarId) return false;
+
+    const { data: origins } = await this.db
+      .from('calendar_events')
+      .select('sync_group_id')
+      .eq('connected_calendar_id', parsed.originCalendarId)
+      .eq('provider_event_id', parsed.originProviderEventId)
+      .eq('event_role', 'ORIGIN')
+      .not('sync_group_id', 'is', null);
+    const groupIds = [
+      ...new Set(
+        (origins ?? [])
+          .map((row) => row.sync_group_id as string | null)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    if (groupIds.length === 0) return false;
+
+    const { data: abandoned } = await this.db
+      .from('calendar_events')
+      .select('id')
+      .eq('connected_calendar_id', calendarId)
+      .eq('event_role', 'MIRROR')
+      .eq('status', 'abandoned')
+      .in('sync_group_id', groupIds)
+      .limit(1);
+    return Boolean(abandoned && abandoned.length > 0);
   }
 
   async markAbandoned(id: string): Promise<void> {
@@ -186,7 +210,11 @@ export class PostgresStore implements SyncStore {
     if (event?.syncGroupId) {
       const origin = (await this.listGroupEvents(event.syncGroupId)).find((e) => e.eventRole === 'ORIGIN');
       if (origin) {
-        const originKey = `${origin.connectedCalendarId}:${origin.providerEventId}:${event.connectedCalendarId}`;
+        const originKey = buildMirrorAbandonmentKey(
+          origin.connectedCalendarId,
+          origin.providerEventId,
+          event.connectedCalendarId,
+        );
         await this.db.from('sync_log').insert({
           user_id: event.userId,
           calendar_id: event.connectedCalendarId,

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
-import { decryptSecret, encryptSecret, needsRefresh, randomHex, sha256Hex } from '../crypto/tokens.ts';
+import { decryptSecret, encryptSecret, isAuthRequiredError, needsRefresh, randomHex, sha256Hex } from '../crypto/tokens.ts';
 import type { FirewallRule } from '../firewall/rules.ts';
 import { env, envOptional, functionPublicUrl, logSafe } from '../http.ts';
 import { GoogleCalendarProvider } from '../providers/google.ts';
@@ -136,13 +136,7 @@ export async function getValidAccessToken(
           .eq('id', connectionId);
       }
     } catch (err) {
-      const message = String(err);
-      const status =
-        (err as { status?: string }).status === 'AUTH_REQUIRED' ||
-        message.includes('invalid_grant') ||
-        message.includes('icloud_auth_failed')
-          ? 'AUTH_REQUIRED'
-          : 'ERROR';
+      const status = isAuthRequiredError(err) ? 'AUTH_REQUIRED' : 'ERROR';
       await db
         .from('calendar_connections')
         .update({ status, last_sync_error: 'token_refresh_failed' })
@@ -339,6 +333,11 @@ export async function syncConnectedCalendar(
 ): Promise<{ imported: number; errors: string[] }> {
   const started = Date.now();
   const { ctx, calendar } = await loadSyncContext(db, calendarId);
+  const connMeta = calendar.calendar_connections as { status?: string } | undefined;
+  if (connMeta?.status === 'AUTH_REQUIRED') {
+    logSafe('[calendar-sync] skipped_auth_required', { calendarId });
+    throw Object.assign(new Error('auth_required'), { status: 'AUTH_REQUIRED' });
+  }
   const { accessToken, provider } = await getValidAccessToken(db, ctx.connectionId);
   const impl = providerFor(provider);
   const store = new PostgresStore(db);
@@ -395,9 +394,7 @@ export async function syncConnectedCalendar(
       pulled = await runFull();
     }
   } catch (err) {
-    const message = String(err);
-    const authFailed =
-      message.includes('icloud_auth_failed') || (err as { status?: string }).status === 'AUTH_REQUIRED';
+    const authFailed = isAuthRequiredError(err);
     const { data: prevConn } = await db
       .from('calendar_connections')
       .select('consecutive_sync_failures, poll_interval_seconds')
@@ -655,6 +652,27 @@ export async function processSyncJob(db: SupabaseClient, jobId: string): Promise
   }
 
   try {
+    const { data: connRow } = await db
+      .from('calendar_connections')
+      .select('status')
+      .eq('id', claimed.connection_id)
+      .maybeSingle();
+    if (connRow?.status === 'AUTH_REQUIRED') {
+      await db
+        .from('sync_jobs')
+        .update({
+          status: 'failed',
+          error: 'auth_required',
+          completed_at: new Date().toISOString(),
+        })
+        .eq('id', jobId);
+      logSafe('[calendar-sync] job_skipped_auth_required', {
+        connectionId: claimed.connection_id,
+        calendarId: claimed.connected_calendar_id,
+      });
+      return;
+    }
+
     if (claimed.connected_calendar_id) {
       await syncConnectedCalendar(db, claimed.connected_calendar_id, 'auto');
     } else {
@@ -708,6 +726,15 @@ export async function ensureWebhook(db: SupabaseClient, calendarId: string): Pro
   }
   if (calendar.enabled === false) {
     logSafe(`${watchLog(ctx.provider)} skipped_disabled`, { calendarId });
+    return;
+  }
+  const { data: connStatus } = await db
+    .from('calendar_connections')
+    .select('status')
+    .eq('id', ctx.connectionId)
+    .maybeSingle();
+  if (connStatus?.status === 'AUTH_REQUIRED') {
+    logSafe(`${watchLog(ctx.provider)} skipped_auth_required`, { calendarId });
     return;
   }
   const horizon = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();

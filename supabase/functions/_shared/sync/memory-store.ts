@@ -1,3 +1,4 @@
+import { buildMirrorAbandonmentKey, parseMirrorAbandonmentKey } from './abandonment.ts';
 import type { EventRole, EventStatus, StoredEvent, SyncStore } from './types.ts';
 
 export class MemoryStore implements SyncStore {
@@ -98,7 +99,30 @@ export class MemoryStore implements SyncStore {
   }
 
   async wasMirrorAbandoned(calendarId: string, originKey: string): Promise<boolean> {
-    return this.abandoned.has(`${calendarId}::${originKey}`);
+    if (this.abandoned.has(`${calendarId}::${originKey}`)) return true;
+
+    const parsed = parseMirrorAbandonmentKey(originKey);
+    if (!parsed || parsed.targetCalendarId !== calendarId) return false;
+
+    for (const mirror of this.events.values()) {
+      if (
+        mirror.eventRole !== 'MIRROR' ||
+        mirror.status !== 'abandoned' ||
+        mirror.connectedCalendarId !== calendarId ||
+        !mirror.syncGroupId
+      ) {
+        continue;
+      }
+      const origin = [...this.events.values()].find(
+        (e) =>
+          e.syncGroupId === mirror.syncGroupId &&
+          e.eventRole === 'ORIGIN' &&
+          e.connectedCalendarId === parsed.originCalendarId &&
+          e.providerEventId === parsed.originProviderEventId,
+      );
+      if (origin) return true;
+    }
+    return false;
   }
 
   async markAbandoned(id: string): Promise<void> {
@@ -109,7 +133,11 @@ export class MemoryStore implements SyncStore {
     if (event.syncGroupId) {
       const origin = (await this.listGroupEvents(event.syncGroupId)).find((e) => e.eventRole === 'ORIGIN');
       if (origin) {
-        const originKey = `${origin.connectedCalendarId}:${origin.providerEventId}:${event.connectedCalendarId}`;
+        const originKey = buildMirrorAbandonmentKey(
+          origin.connectedCalendarId,
+          origin.providerEventId,
+          event.connectedCalendarId,
+        );
         this.abandoned.add(`${event.connectedCalendarId}::${originKey}`);
       }
     }
