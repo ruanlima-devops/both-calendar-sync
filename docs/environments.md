@@ -109,7 +109,7 @@ Both organization
 
 O `project_id` em `supabase/config.toml` (`both-stage`) identifica só o ambiente local do CLI. Não é o Project Ref remoto.
 
-O repositório está linked ao BOTH STAGE (`qszggrrjhcwltnmxpxcy`). Google Auth (Dashboard), Google Calendar e Microsoft Calendar têm clients novos e secrets de Edge no STAGE. Email, billing, Apple Auth, cron schedules e PROD continuam PENDING. Detalhes em `docs/stage-integrations-setup.md`.
+O repositório está linked ao BOTH STAGE (`qszggrrjhcwltnmxpxcy`). Google Auth (Dashboard), Google Calendar e Microsoft Calendar têm clients novos e secrets de Edge no STAGE. Cron versionado (`renew-subscriptions`, `reconcile-sync`) via migration — seed Vault por ambiente (`docs/cron-schedules.md`). Email, billing, Apple Auth, `icloud-poll`/`send-email-digest` e PROD continuam PENDING. Detalhes em `docs/stage-integrations-setup.md`.
 
 ## PROD
 
