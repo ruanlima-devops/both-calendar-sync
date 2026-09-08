@@ -12,6 +12,7 @@ import {
   type TargetCalendar,
 } from './types.ts';
 import { optionalUuidOrNull } from './metadata.ts';
+import { buildMirrorAbandonmentKey } from './abandonment.ts';
 import {
   attachRecurringKind,
   canMirrorRecurringKind,
@@ -308,7 +309,11 @@ export async function createMirrorsForOrigin(
   result.stored = { ...origin, eventRole: 'ORIGIN', syncGroupId: groupId };
 
   for (const { target, rule } of pairs) {
-    const originKey = `${origin.connectedCalendarId}:${origin.providerEventId}:${target.id}`;
+    const originKey = buildMirrorAbandonmentKey(
+      origin.connectedCalendarId,
+      origin.providerEventId,
+      target.id,
+    );
     if (await store.wasMirrorAbandoned(target.id, originKey)) {
       result.skipped = result.skipped ?? 'abandoned_mirror_not_recreated';
       continue;
