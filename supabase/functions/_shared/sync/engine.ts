@@ -11,6 +11,7 @@ import {
   type SyncStore,
   type TargetCalendar,
 } from './types.ts';
+import { optionalUuidOrNull } from './metadata.ts';
 import {
   mirrorPayloadFromRule,
   shouldPropagateEvent,
@@ -107,7 +108,7 @@ export async function applyIncomingEvent(
     connectedCalendarId: ctx.connectedCalendarId,
     providerEventId: incoming.providerEventId,
     eventRole: role,
-    syncGroupId: existing?.syncGroupId ?? incoming.unifySyncGroupId ?? null,
+    syncGroupId: existing?.syncGroupId ?? optionalUuidOrNull(incoming.unifySyncGroupId),
     title: incoming.title,
     description: incoming.description,
     location: incoming.location,

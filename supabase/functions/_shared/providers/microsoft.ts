@@ -1,6 +1,7 @@
 import { mapOAuthError } from '../crypto/tokens.ts';
 import { microsoftDateToNormalized } from '../sync/dates.ts';
 import { isDeltaLinkInvalid } from '../sync/engine.ts';
+import { optionalUuidOrUndefined } from '../sync/metadata.ts';
 import {
   MS_PROP_GUID,
   UNIFY_PROP_GROUP,
@@ -50,7 +51,7 @@ export function parseMicrosoftEvent(raw: Record<string, unknown>, fallbackTz: st
     etag: raw['@odata.etag'] ? String(raw['@odata.etag']) : undefined,
     updatedAt: raw.lastModifiedDateTime ? String(raw.lastModifiedDateTime) : undefined,
     recurrenceRule: raw.recurrence ? JSON.stringify(raw.recurrence) : undefined,
-    unifySyncGroupId: group,
+    unifySyncGroupId: optionalUuidOrUndefined(group),
     unifyEventRole: role,
     isDeleted: removed || status === 'cancelled',
     busyTransparency: raw.showAs ? String(raw.showAs) : 'busy',
@@ -277,7 +278,7 @@ async function requestToken(tenant: string, params: Record<string, string>): Pro
   return body as Record<string, string>;
 }
 
-function toMicrosoftBody(input: CreateEventInput): Record<string, unknown> {
+export function toMicrosoftBody(input: CreateEventInput): Record<string, unknown> {
   const startDate = input.startAt.slice(0, 10);
   let endDate = input.endAt.slice(0, 10);
   // Graph all-day end is exclusive.
@@ -285,6 +286,14 @@ function toMicrosoftBody(input: CreateEventInput): Record<string, unknown> {
     const next = new Date(`${startDate}T12:00:00Z`);
     next.setUTCDate(next.getUTCDate() + 1);
     endDate = next.toISOString().slice(0, 10);
+  }
+  const extended: Array<{ id: string; value: string }> = [
+    { id: ROLE_PROP, value: input.role },
+  ];
+  const group = optionalUuidOrUndefined(input.syncGroupId);
+  if (group) extended.unshift({ id: GROUP_PROP, value: group });
+  if (input.clientEventId) {
+    extended.push({ id: `String {${MS_PROP_GUID}} Name unifyClientEventId`, value: input.clientEventId });
   }
   return {
     subject: input.title,
@@ -305,13 +314,7 @@ function toMicrosoftBody(input: CreateEventInput): Record<string, unknown> {
           type: 'required',
         }))
       : undefined,
-    singleValueExtendedProperties: [
-      { id: GROUP_PROP, value: input.syncGroupId ?? '' },
-      { id: ROLE_PROP, value: input.role },
-      ...(input.clientEventId
-        ? [{ id: `String {${MS_PROP_GUID}} Name unifyClientEventId`, value: input.clientEventId }]
-        : []),
-    ],
+    singleValueExtendedProperties: extended,
   };
 }
 

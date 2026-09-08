@@ -1,6 +1,7 @@
 import { mapOAuthError } from '../crypto/tokens.ts';
 import { googleDateToNormalized } from '../sync/dates.ts';
 import { isSyncTokenInvalid } from '../sync/engine.ts';
+import { buildUnifyPrivateProps, optionalUuidOrUndefined } from '../sync/metadata.ts';
 import {
   UNIFY_PROP_GROUP,
   UNIFY_PROP_ROLE,
@@ -42,7 +43,7 @@ export function parseGoogleEvent(raw: Record<string, unknown>, fallbackTz: strin
     updatedAt: raw.updated ? String(raw.updated) : undefined,
     recurrenceRule: rec?.[0],
     recurringEventId: raw.recurringEventId ? String(raw.recurringEventId) : undefined,
-    unifySyncGroupId: privateProps[UNIFY_PROP_GROUP],
+    unifySyncGroupId: optionalUuidOrUndefined(privateProps[UNIFY_PROP_GROUP]),
     unifyEventRole: privateProps[UNIFY_PROP_ROLE] as NormalizedEvent['unifyEventRole'],
     isDeleted: status === 'cancelled',
     busyTransparency: raw.transparency ? String(raw.transparency) : 'opaque',
@@ -287,7 +288,7 @@ export class GoogleCalendarProvider implements CalendarProvider {
   }
 }
 
-function toGoogleBody(input: CreateEventInput): Record<string, unknown> {
+export function toGoogleBody(input: CreateEventInput): Record<string, unknown> {
   const startDay = input.startAt.slice(0, 10);
   let endDay = input.endAt.slice(0, 10);
   // Google all-day end is exclusive; ensure at least one day span.
@@ -313,10 +314,7 @@ function toGoogleBody(input: CreateEventInput): Record<string, unknown> {
     transparency: 'opaque',
     visibility: input.role === 'MIRROR' ? 'private' : undefined,
     extendedProperties: {
-      private: {
-        [UNIFY_PROP_GROUP]: input.syncGroupId ?? '',
-        [UNIFY_PROP_ROLE]: input.role,
-      },
+      private: buildUnifyPrivateProps({ syncGroupId: input.syncGroupId, role: input.role }),
     },
   };
   if (input.clientEventId && /^[a-v0-9]{5,1024}$/.test(input.clientEventId)) {
