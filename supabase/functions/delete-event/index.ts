@@ -58,6 +58,8 @@ Deno.serve((req) =>
         isDeleted: true,
         unifyEventRole: existing.eventRole === 'MIRROR' ? 'ORIGIN' : existing.eventRole,
         unifySyncGroupId: existing.syncGroupId ?? undefined,
+        recurrenceRule: existing.recurrenceRule ?? undefined,
+        recurringEventId: existing.recurringEventId ?? undefined,
       },
       store,
       new ProviderMirrorActor(db),

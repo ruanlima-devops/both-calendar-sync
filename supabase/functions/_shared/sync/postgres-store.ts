@@ -19,6 +19,8 @@ function mapRow(row: Record<string, unknown>, connectionId = '', providerCalenda
     allDay: Boolean(row.all_day),
     location: (row.location as string | null) ?? null,
     status: row.status as EventStatus,
+    recurrenceRule: (row.recurrence_rule as string | null) ?? null,
+    recurringEventId: (row.recurring_event_id as string | null) ?? null,
   };
 }
 
