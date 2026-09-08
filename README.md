@@ -32,10 +32,11 @@ O scheme legado `unify` continua registrado em todas as variantes até a migraç
 6. Webhooks públicos (tunnel em local):
    - `.../functions/v1/google-webhook`
    - `.../functions/v1/microsoft-webhook`
-7. Agende cron (dashboard Supabase):
-   - `renew-subscriptions` a cada hora
-   - `reconcile-sync` a cada 15 minutos
-   - Header `x-cron-secret`
+7. Cron (versionado — migration `20260908000001_cron_renew_reconcile.sql`):
+   - `both-renew-subscriptions` → `renew-subscriptions` a cada hora
+   - `both-reconcile-sync` → `reconcile-sync` a cada 15 minutos
+   - Seed Vault (`project_url`, `cron_secret`, `anon_key`) — ver `docs/cron-schedules.md`
+   - Header `x-cron-secret` (Edge `CRON_SECRET`)
 
 ```bash
 npm install

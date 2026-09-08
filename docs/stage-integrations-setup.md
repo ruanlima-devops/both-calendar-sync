@@ -298,13 +298,22 @@ Legacy: no
 
 ## Intentionally pending
 
-- Live E2E on Both STAGE (Google login, Google/Microsoft calendar connect, Sync Now, webhooks)
 - Apple Auth
 - Stripe
 - RevenueCat secrets / dashboard webhook
 - Resend
-- Cron schedules (`icloud-poll`, `renew-subscriptions`, `reconcile-sync`, `send-email-digest`)
+- Cron schedules ainda não versionados: `icloud-poll`, `send-email-digest`
 - Both PROD project
+
+## Cron (M1-010 / M1-011)
+
+Migration versionada cria:
+
+- `both-renew-subscriptions` (hourly)
+- `both-reconcile-sync` (every 15 minutes)
+
+Após `db push` no STAGE, seed Vault (`project_url`, `cron_secret`, `anon_key`) conforme `docs/cron-schedules.md`.
+Jobs só invocam Edge com sucesso depois do seed.
 
 ---
 
@@ -337,10 +346,3 @@ After pulling the latest code, restart `npm run web --clear` and retry.
 
 If it still fails, confirm Entra redirect URI is exactly:
 `https://qszggrrjhcwltnmxpxcy.supabase.co/functions/v1/microsoft-oauth`
-
-- Apple Auth
-- Stripe
-- RevenueCat secrets / dashboard webhook
-- Resend
-- Cron schedules (`icloud-poll`, `renew-subscriptions`, `reconcile-sync`, `send-email-digest`)
-- Both PROD project

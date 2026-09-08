@@ -13,7 +13,8 @@ Checklist operacional. Não contém secrets.
 - [x] Calendar OAuth (clients + Edge secrets; live connection E2E pending)
 - [ ] Email
 - [ ] Billing
-- [ ] Scheduled jobs
+- [x] Scheduled jobs (`renew-subscriptions`, `reconcile-sync` via migration; Vault seed required per env)
+- [ ] Scheduled jobs remaining (`icloud-poll`, `send-email-digest`)
 
 ## Supabase PROD
 
