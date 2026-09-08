@@ -129,12 +129,6 @@ export async function getValidAccessToken(
           token_expires_at: refreshed.expiresAt,
         })
         .eq('connection_id', connectionId);
-      if (conn.status === 'AUTH_REQUIRED') {
-        await db
-          .from('calendar_connections')
-          .update({ status: 'CONNECTED', last_sync_error: null })
-          .eq('id', connectionId);
-      }
     } catch (err) {
       const status = isAuthRequiredError(err) ? 'AUTH_REQUIRED' : 'ERROR';
       await db
@@ -150,6 +144,14 @@ export async function getValidAccessToken(
       });
       throw err;
     }
+  }
+
+  // Tokens usable again (refresh or still-valid access) → leave AUTH_REQUIRED.
+  if (conn.status === 'AUTH_REQUIRED') {
+    await db
+      .from('calendar_connections')
+      .update({ status: 'CONNECTED', last_sync_error: null })
+      .eq('id', connectionId);
   }
 
   return { accessToken, provider: conn.provider as ProviderName, userId: conn.user_id };
@@ -333,11 +335,8 @@ export async function syncConnectedCalendar(
 ): Promise<{ imported: number; errors: string[] }> {
   const started = Date.now();
   const { ctx, calendar } = await loadSyncContext(db, calendarId);
-  const connMeta = calendar.calendar_connections as { status?: string } | undefined;
-  if (connMeta?.status === 'AUTH_REQUIRED') {
-    logSafe('[calendar-sync] skipped_auth_required', { calendarId });
-    throw Object.assign(new Error('auth_required'), { status: 'AUTH_REQUIRED' });
-  }
+  // Resolve tokens first: successful refresh / still-valid access clears AUTH_REQUIRED.
+  // Reconcile/processSyncJob still skip AUTH_REQUIRED to avoid retry storms when revoke is real.
   const { accessToken, provider } = await getValidAccessToken(db, ctx.connectionId);
   const impl = providerFor(provider);
   const store = new PostgresStore(db);

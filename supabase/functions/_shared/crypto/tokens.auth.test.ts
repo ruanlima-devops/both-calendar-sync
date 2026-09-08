@@ -49,9 +49,8 @@ describe('OAuth revocation classification', () => {
     expect(mapOAuthError(503)).toBe('ERROR');
   });
 
-  it('reconnect path: successful refresh clears AUTH_REQUIRED precondition', () => {
-    // getValidAccessToken promotes AUTH_REQUIRED → CONNECTED after refresh success.
-    // Here we only assert the refresh gate + classification stay consistent.
+  it('reconnect path: successful token resolution clears AUTH_REQUIRED', () => {
+    // getValidAccessToken promotes AUTH_REQUIRED → CONNECTED after usable tokens return.
     expect(needsRefresh(new Date(Date.now() - 1000).toISOString())).toBe(true);
     expect(mapOAuthError(400, 'invalid_grant')).toBe('AUTH_REQUIRED');
     expect(isAuthRequiredError(Object.assign(new Error('ok'), { status: 'AUTH_REQUIRED' }))).toBe(true);
