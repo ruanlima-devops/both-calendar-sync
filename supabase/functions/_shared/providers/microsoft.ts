@@ -2,6 +2,7 @@ import { mapOAuthError } from '../crypto/tokens.ts';
 import { microsoftDateToNormalized } from '../sync/dates.ts';
 import { isDeltaLinkInvalid } from '../sync/engine.ts';
 import { optionalUuidOrUndefined } from '../sync/metadata.ts';
+import { attachRecurringKind } from '../sync/recurring.ts';
 import { providerFetch, type ProviderOperation, type RetrySafety } from './http-retry.ts';
 import {
   MS_PROP_GUID,
@@ -42,7 +43,8 @@ export function parseMicrosoftEvent(raw: Record<string, unknown>, fallbackTz: st
   const removed = Boolean(raw['@removed']) ||
     (raw['@removed'] as { reason?: string } | undefined)?.reason === 'deleted';
   const status: NormalizedEvent['status'] = removed || raw.isCancelled ? 'cancelled' : 'confirmed';
-  return {
+  const providerEventType = raw.type ? String(raw.type) : undefined;
+  return attachRecurringKind({
     providerEventId: String(raw.id ?? ''),
     title: String(raw.subject ?? '(sem título)'),
     description: raw.bodyPreview ? String(raw.bodyPreview) : undefined,
@@ -52,11 +54,13 @@ export function parseMicrosoftEvent(raw: Record<string, unknown>, fallbackTz: st
     etag: raw['@odata.etag'] ? String(raw['@odata.etag']) : undefined,
     updatedAt: raw.lastModifiedDateTime ? String(raw.lastModifiedDateTime) : undefined,
     recurrenceRule: raw.recurrence ? JSON.stringify(raw.recurrence) : undefined,
+    recurringEventId: raw.seriesMasterId ? String(raw.seriesMasterId) : undefined,
+    providerEventType,
     unifySyncGroupId: optionalUuidOrUndefined(group),
     unifyEventRole: role,
     isDeleted: removed || status === 'cancelled',
     busyTransparency: raw.showAs ? String(raw.showAs) : 'busy',
-  };
+  });
 }
 
 export class MicrosoftCalendarProvider implements CalendarProvider {

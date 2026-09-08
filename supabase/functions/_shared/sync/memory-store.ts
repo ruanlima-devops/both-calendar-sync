@@ -37,6 +37,8 @@ export class MemoryStore implements SyncStore {
     location?: string;
     status: EventStatus;
     firewallRuleId?: string | null;
+    recurrenceRule?: string;
+    recurringEventId?: string;
   }): Promise<StoredEvent> {
     const k = this.key(input.connectedCalendarId, input.providerEventId);
     const prev = this.events.get(k);
@@ -58,6 +60,8 @@ export class MemoryStore implements SyncStore {
       allDay: input.allDay,
       location: input.location ?? prev?.location ?? null,
       status: input.status,
+      recurrenceRule: input.recurrenceRule ?? prev?.recurrenceRule ?? null,
+      recurringEventId: input.recurringEventId ?? prev?.recurringEventId ?? null,
     };
     this.events.set(k, stored);
     return stored;

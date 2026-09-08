@@ -2,6 +2,7 @@ import { mapOAuthError } from '../crypto/tokens.ts';
 import { googleDateToNormalized } from '../sync/dates.ts';
 import { isSyncTokenInvalid } from '../sync/engine.ts';
 import { buildUnifyPrivateProps, optionalUuidOrUndefined } from '../sync/metadata.ts';
+import { attachRecurringKind } from '../sync/recurring.ts';
 import { googleIdempotentEventId, providerFetch, type ProviderOperation, type RetrySafety } from './http-retry.ts';
 import {
   UNIFY_PROP_GROUP,
@@ -33,7 +34,7 @@ export function parseGoogleEvent(raw: Record<string, unknown>, fallbackTz: strin
     ((raw.extendedProperties as { private?: Record<string, string> } | undefined)?.private) ?? {};
   const status = raw.status === 'cancelled' ? 'cancelled' : raw.status === 'tentative' ? 'tentative' : 'confirmed';
   const rec = raw.recurrence as string[] | undefined;
-  return {
+  return attachRecurringKind({
     providerEventId: String(raw.id ?? ''),
     title: String(raw.summary ?? '(sem título)'),
     description: raw.description ? String(raw.description) : undefined,
@@ -48,7 +49,7 @@ export function parseGoogleEvent(raw: Record<string, unknown>, fallbackTz: strin
     unifyEventRole: privateProps[UNIFY_PROP_ROLE] as NormalizedEvent['unifyEventRole'],
     isDeleted: status === 'cancelled',
     busyTransparency: raw.transparency ? String(raw.transparency) : 'opaque',
-  };
+  });
 }
 
 export class GoogleCalendarProvider implements CalendarProvider {
