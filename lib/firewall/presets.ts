@@ -38,7 +38,7 @@ export const FIREWALL_PRESETS: Array<{
   {
     id: 'availability',
     label: 'Apenas disponibilidade',
-    description: 'O destino vê só “Horário reservado · Unify”. Detalhes permanecem privados.',
+    description: 'O destino vê só “Horário reservado · Both”. Detalhes permanecem privados.',
     flags: {
       sync_title: false,
       sync_description: false,

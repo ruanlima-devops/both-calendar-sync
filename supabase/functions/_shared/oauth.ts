@@ -31,8 +31,23 @@ export async function readJsonBody(req: Request): Promise<Record<string, unknown
   }
 }
 
+/** Current variant schemes plus legacy Unify until STAGE/PROD OAuth migration. */
+const NATIVE_OAUTH_SCHEMES = ['both', 'both-dev', 'both-stg', 'unify'] as const;
+// TODO(rebrand): remove legacy `unify` scheme after STAGE/PROD OAuth migration.
+
+function isNativeOAuthRedirect(value: string): boolean {
+  return NATIVE_OAUTH_SCHEMES.some(
+    (scheme) =>
+      value === `${scheme}://oauth` ||
+      value.startsWith(`${scheme}://oauth?`) ||
+      value.startsWith(`${scheme}://oauth/`),
+  );
+}
+
 export function defaultAppRedirect(): string {
-  return envOptional('APP_URL') ?? 'unify://oauth';
+  const appUrl = envOptional('APP_URL');
+  if (appUrl) return appUrl;
+  throw new Error('invalid_oauth_redirect');
 }
 
 /** Prevent open redirects after calendar OAuth. */
@@ -40,8 +55,7 @@ export function assertSafeAppRedirect(redirect: string): string {
   const value = redirect.trim();
   if (!value) return defaultAppRedirect();
 
-  // Custom scheme (native production / preview)
-  if (value === 'unify://oauth' || value.startsWith('unify://oauth?') || value.startsWith('unify://oauth/')) {
+  if (isNativeOAuthRedirect(value)) {
     return value.split('#')[0]!;
   }
 
@@ -200,6 +214,59 @@ export function oauthResultPage(input: {
       ? `connected=${input.provider}`
       : `oauth_error=${input.error ?? 'oauth_failed'}&provider=${input.provider}`,
   );
+
+  if (isWebPopupReturn(input.redirectTo)) {
+    let targetOrigin = '*';
+    try {
+      targetOrigin = new URL(input.redirectTo).origin;
+    } catch {
+      /* keep wildcard fallback */
+    }
+    const payload = {
+      type: 'unify-calendar-oauth',
+      ok: input.ok,
+      provider: input.provider,
+      error: input.ok ? null : (input.error ?? 'oauth_failed'),
+    };
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>${escapeHtml(input.title)}</title>
+<meta http-equiv="refresh" content="0;url=${escapeHtml(redirect)}"></head>
+<body><p>${escapeHtml(input.message)}</p>
+<p><a href="${escapeHtml(redirect)}">Continuar para o Both</a></p>
+<script>
+(function () {
+  var payload = ${JSON.stringify(payload)};
+  var fallback = ${JSON.stringify(redirect)};
+  var targetOrigin = ${JSON.stringify(targetOrigin)};
+  function notifyOpener() {
+    if (!window.opener || window.opener.closed) return false;
+    try {
+      window.opener.postMessage(payload, targetOrigin === '*' ? '*' : targetOrigin);
+      window.close();
+      return true;
+    } catch (e) {}
+    try {
+      window.opener.postMessage(payload, '*');
+      window.close();
+      return true;
+    } catch (e2) {}
+    return false;
+  }
+  if (!notifyOpener()) {
+    window.location.replace(fallback);
+  }
+})();
+</script></body></html>`;
+    return new Response(html, {
+      status: 200,
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store',
+      },
+    });
+  }
+
   try {
     return Response.redirect(redirect, 302);
   } catch {
@@ -208,6 +275,30 @@ export function oauthResultPage(input: {
       headers: { ...corsHeaders, Location: redirect, 'Cache-Control': 'no-store' },
     });
   }
+}
+
+function isWebPopupReturn(url: string): boolean {
+  try {
+    const parsed = new URL(url.trim());
+    if (parsed.protocol === 'exp:' || parsed.protocol === 'exps:') return true;
+    if (
+      (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+      (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1')
+    ) {
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
 }
 
 export function assertMicrosoftClientId(clientId: string): void {

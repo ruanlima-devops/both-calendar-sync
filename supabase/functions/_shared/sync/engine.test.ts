@@ -102,7 +102,7 @@ describe('auto block / mirrors', () => {
     await applyIncomingEvent(ctx({ autoBlockOthers: true }), event(), store, actor);
     await applyIncomingEvent(ctx({ autoBlockOthers: true }), event(), store, actor);
     expect(actor.creates.filter((c) => c.calendarId === 'cal-m')).toHaveLength(1);
-    expect(actor.creates[0]?.title).toBe('Horário reservado · Unify');
+    expect(actor.creates[0]?.title).toBe('Horário reservado · Both');
     expect([...store.events.values()].filter((e) => e.eventRole === 'MIRROR')).toHaveLength(1);
   });
 
@@ -139,7 +139,7 @@ describe('auto block / mirrors', () => {
       ctx({ connectedCalendarId: 'cal-m', provider: 'MICROSOFT', connectionId: 'conn-m' }),
       event({
         providerEventId: mirror!.providerEventId,
-        title: 'Horário reservado · Unify',
+        title: 'Horário reservado · Both',
         unifyEventRole: 'MIRROR',
         unifySyncGroupId: mirror!.syncGroupId ?? undefined,
       }),
@@ -172,9 +172,9 @@ describe('auto block / mirrors', () => {
   it('uses professional busy title and description on mirrors', async () => {
     const { store, actor } = setup();
     await applyIncomingEvent(ctx({ autoBlockOthers: true }), event(), store, actor);
-    expect(actor.creates[0]?.title).toBe('Horário reservado · Unify');
+    expect(actor.creates[0]?.title).toBe('Horário reservado · Both');
     const mirror = [...store.events.values()].find((e) => e.eventRole === 'MIRROR');
-    expect(mirror?.title).toBe('Horário reservado · Unify');
+    expect(mirror?.title).toBe('Horário reservado · Both');
   });
 
   it('does not recreate mirrors when editing the same origin repeatedly', async () => {
@@ -259,7 +259,7 @@ describe('auto block / mirrors', () => {
             syncConference: false,
             ignoreFree: true,
             ignoreCancelled: true,
-            placeholderTitle: 'Horário reservado · Unify',
+            placeholderTitle: 'Horário reservado · Both',
             busyStatus: 'busy',
           },
         ],
@@ -269,7 +269,7 @@ describe('auto block / mirrors', () => {
       actor,
     );
     expect(actor.creates).toHaveLength(1);
-    expect(actor.creates[0]?.title).toBe('Horário reservado · Unify');
+    expect(actor.creates[0]?.title).toBe('Horário reservado · Both');
     const mirror = [...store.events.values()].find((e) => e.eventRole === 'MIRROR');
     expect(mirror?.firewallRuleId).toBe('rule-1');
   });
@@ -293,7 +293,7 @@ describe('auto block / mirrors', () => {
             syncConference: false,
             ignoreFree: true,
             ignoreCancelled: true,
-            placeholderTitle: 'Horário reservado · Unify',
+            placeholderTitle: 'Horário reservado · Both',
             busyStatus: 'busy',
           },
         ],

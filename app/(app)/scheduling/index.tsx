@@ -35,7 +35,7 @@ export default function SchedulingDashboard() {
       setUsername(data.bookingUsername ?? '');
       setLinks(data.links);
     } catch (err) {
-      Alert.alert('Unify', friendlyError(err));
+      Alert.alert('Both', friendlyError(err));
     } finally {
       setLoading(false);
     }
@@ -52,13 +52,13 @@ export default function SchedulingDashboard() {
       showToast('Username salvo');
       await load();
     } catch (err) {
-      Alert.alert('Unify', friendlyError(err));
+      Alert.alert('Both', friendlyError(err));
     }
   }
 
   async function copyLink(link: SchedulingLink) {
     if (!savedUsername) {
-      Alert.alert('Unify', 'Defina um username de agendamento primeiro.');
+      Alert.alert('Both', 'Defina um username de agendamento primeiro.');
       return;
     }
     const url = bookingPageUrl(savedUsername, link.slug);
@@ -96,7 +96,7 @@ export default function SchedulingDashboard() {
       await load();
       showToast(link.enabled ? 'Link desativado' : 'Link ativado');
     } catch (err) {
-      Alert.alert('Unify', friendlyError(err));
+      Alert.alert('Both', friendlyError(err));
     }
   }
 
@@ -115,7 +115,7 @@ export default function SchedulingDashboard() {
       <Card>
         <Typography variant="sectionTitle">Username público</Typography>
         <Input
-          label="unify.app/seu-username/…"
+          label="both.app/seu-username/…"
           value={username}
           autoCapitalize="none"
           onChangeText={setUsername}

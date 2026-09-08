@@ -239,14 +239,14 @@ export interface MirrorActor {
 }
 
 /** User-visible title for Unify-managed busy placeholders (privacy-preserving). */
-export const BUSY_TITLE = 'Horário reservado · Unify';
+export const BUSY_TITLE = 'Horário reservado · Both';
 
 /** Institutional description — never copies origin details. */
 export const BUSY_DESCRIPTION =
-  'Este horário foi reservado automaticamente pelo Unify para evitar conflitos entre suas agendas.\n\nOs detalhes do compromisso original permanecem privados.\n\nGerencie suas agendas pelo Unify.';
+  'Este horário foi reservado automaticamente pelo Both para evitar conflitos entre suas agendas.\n\nOs detalhes do compromisso original permanecem privados.\n\nGerencie suas agendas pelo Both.';
 
 export const BUSY_DESCRIPTION_COMPACT =
-  'Horário reservado automaticamente pelo Unify para evitar conflitos entre agendas.';
+  'Horário reservado automaticamente pelo Both para evitar conflitos entre agendas.';
 
 export const UNIFY_PROP_GROUP = 'unifySyncGroupId';
 export const UNIFY_PROP_ROLE = 'unifyEventRole';

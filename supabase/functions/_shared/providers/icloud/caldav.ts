@@ -62,7 +62,7 @@ async function caldavFetch(
       signal: controller.signal,
       headers: {
         Authorization: basicHeader(auth),
-        'User-Agent': 'Unify/1.0 CalDAV',
+        'User-Agent': 'Both/1.0 CalDAV',
         ...(init.headers ?? {}),
       },
     });
@@ -78,7 +78,7 @@ async function caldavFetch(
         signal: controller.signal,
         headers: {
           Authorization: basicHeader(auth),
-          'User-Agent': 'Unify/1.0 CalDAV',
+          'User-Agent': 'Both/1.0 CalDAV',
           ...(init.headers ?? {}),
         },
       });

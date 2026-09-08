@@ -88,6 +88,13 @@ export function isBusyBlockEvent(event: Pick<CalendarEvent, 'event_role'>): bool
 }
 
 export function busyBlockDisplayTitle(title: string | null | undefined): string {
-  if (!title || title === BUSY_TITLE || title === 'Ocupado') return 'Horário reservado';
+  if (
+    !title ||
+    title === BUSY_TITLE ||
+    title === 'Horário reservado · Unify' ||
+    title === 'Ocupado'
+  ) {
+    return 'Horário reservado';
+  }
   return title;
 }

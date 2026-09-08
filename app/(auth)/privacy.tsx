@@ -5,7 +5,7 @@ const BODY = `Última atualização: 23 de agosto de 2026
 [REVISÃO JURÍDICA NECESSÁRIA] Este texto é um rascunho técnico para publicação nas lojas. Faça revisão por advogado antes de usar como política definitiva.
 
 1. Quem somos
-O Unify é um aplicativo de calendário unificado que sincroniza agendas Google, Microsoft e Apple iCloud que você conectar.
+O Both é um aplicativo de calendário unificado que sincroniza agendas Google, Microsoft e Apple iCloud que você conectar.
 
 2. Dados que tratamos
 • Conta: identificador de usuário, e-mail (ou e-mail oculto da Apple), nome de exibição opcional, fuso horário e preferências.
@@ -16,7 +16,7 @@ O Unify é um aplicativo de calendário unificado que sincroniza agendas Google,
 • Assinatura: status de trial/assinatura, provedor (Stripe, App Store ou Google Play) e identificadores de cobrança necessários.
 
 3. Finalidades
-Autenticar você, sincronizar calendários, evitar conflitos entre agendas, enviar resumos opcionais, processar assinatura Unify Pro e melhorar confiabilidade do produto.
+Autenticar você, sincronizar calendários, evitar conflitos entre agendas, enviar resumos opcionais, processar assinatura Both Pro e melhorar confiabilidade do produto.
 
 4. Terceiros
 Supabase (backend/auth/banco), Google (login e Calendar), Microsoft (Graph), Apple iCloud Calendar via CalDAV (senha específica de app), Stripe (cobrança web), Apple/Google Play/RevenueCat (cobrança mobile), Resend (e-mails).
@@ -25,7 +25,7 @@ Supabase (backend/auth/banco), Google (login e Calendar), Microsoft (Graph), App
 Você pode excluir a conta no app (Conta → Excluir minha conta) ou em /delete-account. Isso remove perfil, conexões, tokens de calendário, eventos sincronizados e preferências. Registros financeiros mínimos podem ser retidos conforme obrigação legal.
 
 6. Tracking
-O Unify não utiliza SDKs de publicidade para tracking cross-app. Não revendemos seus eventos de calendário.
+O Both não utiliza SDKs de publicidade para tracking cross-app. Não revendemos seus eventos de calendário.
 
 7. Contato
 [PENDENTE] Informe e-mail/URL de suporte oficiais antes da publicação.

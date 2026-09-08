@@ -153,7 +153,7 @@ Deno.serve((req) =>
       sync_conference: flags.syncConference,
       ignore_free: body.ignoreFree ?? true,
       ignore_cancelled: body.ignoreCancelled ?? true,
-      placeholder_title: body.placeholderTitle?.trim() || 'Horário reservado · Unify',
+      placeholder_title: body.placeholderTitle?.trim() || 'Horário reservado · Both',
       health_status: 'active',
       last_error: null,
       updated_at: new Date().toISOString(),

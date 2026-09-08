@@ -33,7 +33,7 @@ export default function PaywallScreen() {
   const { entitlement, refresh } = useEntitlement();
   const { showToast } = useToast();
   const params = useLocalSearchParams<{ canceled?: string }>();
-  const [planName, setPlanName] = useState('Unify Pro');
+  const [planName, setPlanName] = useState('Both Pro');
   const [priceLabel, setPriceLabel] = useState<string | null>(null);
   const [loadingPlan, setLoadingPlan] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -46,7 +46,7 @@ export default function PaywallScreen() {
         if (native) {
           const pack = await getMonthlyPackage();
           if (pack) {
-            setPlanName(pack.product.title || 'Unify Pro');
+            setPlanName(pack.product.title || 'Both Pro');
             setPriceLabel(pack.product.priceString);
           } else {
             setPriceLabel(null);
@@ -129,7 +129,7 @@ export default function PaywallScreen() {
         <Typography variant="pageTitle">
           {entitlement.source === 'trial' && !entitlement.hasAccess
             ? 'Seu período gratuito terminou'
-            : 'Continue com o Unify Pro'}
+            : 'Continue com o Both Pro'}
         </Typography>
         <Typography variant="body" muted>
           Assine para continuar usando sincronização automática, notificações e resumos por email.
@@ -162,7 +162,7 @@ export default function PaywallScreen() {
         )}
         <Typography variant="metadata" muted>
           {native
-            ? 'Assinatura gerenciada pela App Store / Google Play. O teste gratuito do Unify não é um trial da loja.'
+            ? 'Assinatura gerenciada pela App Store / Google Play. O teste gratuito do Both não é um trial da loja.'
             : 'Pagamento seguro via Stripe. Cancele quando quiser.'}
         </Typography>
       </View>
@@ -181,7 +181,7 @@ export default function PaywallScreen() {
               : 'Abrindo checkout…'
             : native
               ? 'Assinar'
-              : 'Continuar com Unify'
+              : 'Continuar com Both'
         }
         onPress={() => void subscribe()}
         loading={busy}

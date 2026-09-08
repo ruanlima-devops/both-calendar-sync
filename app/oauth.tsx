@@ -1,6 +1,11 @@
 import { useEffect } from 'react';
-import { ActivityIndicator, Alert, View } from 'react-native';
+import { ActivityIndicator, Alert, Platform, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import {
+  notifyOAuthOpener,
+  persistOAuthComplete,
+  type OAuthCompletePayload,
+} from '@/lib/oauth-complete';
 
 export default function OAuthComplete() {
   const router = useRouter();
@@ -10,9 +15,25 @@ export default function OAuthComplete() {
     const error = Array.isArray(params.oauth_error) ? params.oauth_error[0] : params.oauth_error;
     const connected = Array.isArray(params.connected) ? params.connected[0] : params.connected;
     const providerParam = Array.isArray(params.provider) ? params.provider[0] : params.provider;
+    const provider = (connected ?? providerParam ?? null) as OAuthCompletePayload['provider'];
+    const payload: OAuthCompletePayload = {
+      ok: !error,
+      provider,
+      error: error ?? null,
+    };
+
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      persistOAuthComplete(payload);
+      const delivered = notifyOAuthOpener(payload);
+      if (delivered) {
+        window.close();
+        return;
+      }
+    }
+
     if (error && error !== 'access_denied') {
-      const label = providerParam === 'microsoft' || connected === 'microsoft' ? 'Microsoft' : 'Google';
-      Alert.alert('Unify', `Não foi possível conectar sua conta ${label}. Tente novamente.`);
+      const label = provider === 'microsoft' ? 'Microsoft' : 'Google';
+      Alert.alert('Both', `Não foi possível conectar sua conta ${label}. Tente novamente.`);
     }
     router.replace('/(app)/(tabs)/calendars');
   }, [params.connected, params.oauth_error, params.provider, router]);

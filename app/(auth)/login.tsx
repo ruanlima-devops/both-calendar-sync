@@ -5,7 +5,7 @@ import { AppleSignInButton } from '@/components/auth/AppleSignInButton';
 import { AuthFooter } from '@/components/auth/AuthFooter';
 import { AuthShell } from '@/components/auth/AuthShell';
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton';
-import { UnifyLogo } from '@/components/brand/UnifyLogo';
+import { BothLogo } from '@/components/brand/BothLogo';
 import { useGoogleAuth } from '@/hooks/useGoogleAuth';
 import { usePreferredColorScheme } from '@/hooks/usePreferredColorScheme';
 import { isAppleAuthAvailable, signInWithApple } from '@/lib/auth/apple';
@@ -44,13 +44,13 @@ export default function LoginScreen() {
   return (
     <AuthShell colors={colors} footer={<AuthFooter colors={colors} />}>
       <View style={styles.hero}>
-        <UnifyLogo colors={colors} />
+        <BothLogo colors={colors} />
         <Text
           style={[styles.title, { color: colors.text }]}
           accessibilityRole="header"
           maxFontSizeMultiplier={1.35}
         >
-          Bem-vindo ao Unify
+          Bem-vindo ao Both
         </Text>
         <Text style={[styles.subtitle, { color: colors.muted }]} maxFontSizeMultiplier={1.4}>
           Organize sua vida, seus compromissos e seu tempo em um só lugar.

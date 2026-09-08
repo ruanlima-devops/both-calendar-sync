@@ -88,7 +88,7 @@ export default function SchedulingLinkEditor() {
         if (!link) return;
         applyLink(link);
       } catch (err) {
-        Alert.alert('Unify', friendlyError(err));
+        Alert.alert('Both', friendlyError(err));
       }
     })();
   }, [editingId]);
@@ -130,11 +130,11 @@ export default function SchedulingLinkEditor() {
   async function save() {
     const durationMinutes = customDuration ? Number(customDuration) : duration;
     if (!Number.isFinite(durationMinutes) || durationMinutes < 5 || durationMinutes > 480) {
-      Alert.alert('Unify', 'Duração inválida (5–480 min).');
+      Alert.alert('Both', 'Duração inválida (5–480 min).');
       return;
     }
     if (!destinationId || conflictIds.length === 0) {
-      Alert.alert('Unify', 'Escolha destino e calendários de conflito.');
+      Alert.alert('Both', 'Escolha destino e calendários de conflito.');
       return;
     }
     setSaving(true);
@@ -161,7 +161,7 @@ export default function SchedulingLinkEditor() {
       showToast(editingId ? 'Link atualizado' : 'Link criado');
       router.replace('/(app)/scheduling' as Href);
     } catch (err) {
-      Alert.alert('Unify', friendlyError(err));
+      Alert.alert('Both', friendlyError(err));
     } finally {
       setSaving(false);
     }

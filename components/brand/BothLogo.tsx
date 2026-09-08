@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet } from 'react-native';
 import { layout, space, type, type SchemeTokens } from '@/lib/theme';
 
-type UnifyLogoProps = {
+type BothLogoProps = {
   colors: SchemeTokens;
   size?: 'sm' | 'md' | 'lg';
 };
@@ -12,12 +12,12 @@ const MARK = {
   lg: 44,
 } as const;
 
-export function UnifyLogo({ colors, size = 'md' }: UnifyLogoProps) {
+export function BothLogo({ colors, size = 'md' }: BothLogoProps) {
   const mark = MARK[size];
   const inner = Math.round(mark * 0.42);
 
   return (
-    <View style={styles.wrap} accessibilityRole="image" accessibilityLabel="Unify">
+    <View style={styles.wrap} accessibilityRole="image" accessibilityLabel="Both">
       <View
         style={[
           styles.mark,
@@ -51,11 +51,8 @@ export function UnifyLogo({ colors, size = 'md' }: UnifyLogoProps) {
           ]}
         />
       </View>
-      <Text
-        style={[styles.wordmark, { color: colors.text }]}
-        maxFontSizeMultiplier={1.35}
-      >
-        UNIFY
+      <Text style={[styles.wordmark, { color: colors.text }]} maxFontSizeMultiplier={1.35}>
+        BOTH
       </Text>
     </View>
   );

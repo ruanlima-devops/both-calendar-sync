@@ -9,6 +9,7 @@ import { useSession } from '@/context/session';
 import { useToast } from '@/context/toast';
 import { friendlyError } from '@/lib/errors';
 import { connectCalendar } from '@/lib/oauth';
+import { consumeOAuthComplete } from '@/lib/oauth-complete';
 import { invokeFunction, supabase } from '@/lib/supabase';
 import { space } from '@/lib/theme';
 import type { ConnectedCalendar, CalendarConnection, ProviderName } from '@/lib/types';
@@ -65,7 +66,14 @@ export default function CalendarsScreen() {
     setCalendars((cals ?? []) as ConnectedCalendar[]);
   }, []);
 
-  useFocusEffect(useCallback(() => { void load(); }, [load]));
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+      const completed = consumeOAuthComplete();
+      if (!completed?.ok || !completed.provider) return;
+      showToast(completed.provider === 'microsoft' ? 'Microsoft conectado' : 'Google conectado');
+    }, [load, showToast]),
+  );
 
   useEffect(() => {
     void invokeFunction('sync-now', { ensureWatchesOnly: true }).catch(() => {});
@@ -76,10 +84,20 @@ export default function CalendarsScreen() {
     setConnecting(provider);
     try {
       await connectCalendar(provider);
+      const providerCode = provider === 'google' ? 'GOOGLE' : 'MICROSOFT';
+      const { data: cons, error } = await supabase
+        .from('calendar_connections')
+        .select('*')
+        .eq('provider', providerCode);
+      if (error) throw error;
+      const connected = (cons ?? []).some((row) => row.status === 'CONNECTED');
+      if (!connected) {
+        throw new Error('A autorização terminou, mas a conexão não foi salva. Tente novamente.');
+      }
       await load();
       showToast(provider === 'microsoft' ? 'Microsoft conectado' : 'Google conectado');
     } catch (err) {
-      Alert.alert('Unify', friendlyError(err, 'Não foi possível conectar o calendário.'));
+      Alert.alert('Both', friendlyError(err, 'Não foi possível conectar o calendário.'));
     } finally {
       setConnecting(null);
     }
@@ -108,7 +126,7 @@ export default function CalendarsScreen() {
       await load();
       showToast('Apple iCloud conectado');
     } catch (err) {
-      Alert.alert('Unify', friendlyError(err, 'Não foi possível conectar o iCloud.'));
+      Alert.alert('Both', friendlyError(err, 'Não foi possível conectar o iCloud.'));
     } finally {
       setConnecting(null);
     }
@@ -306,7 +324,7 @@ export default function CalendarsScreen() {
             <Typography variant="pageTitle">Conectar iCloud Calendar</Typography>
             <Typography variant="body" muted>
               Para conectar com segurança, use uma senha específica de app da sua Conta Apple. Sua senha
-              principal da Apple nunca é enviada ao Unify.
+              principal da Apple nunca é enviada ao Both.
             </Typography>
 
             <Pressable onPress={() => setShowHelp((v) => !v)}>
@@ -326,7 +344,7 @@ export default function CalendarsScreen() {
                   3. Escolha Senhas específicas de apps
                 </Typography>
                 <Typography variant="caption" muted>
-                  4. Gere uma senha chamada “Unify”
+                  4. Gere uma senha chamada “Both”
                 </Typography>
                 <Typography variant="caption" muted>
                   5. Cole a senha abaixo

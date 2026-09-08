@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { AuthFooter } from '@/components/auth/AuthFooter';
 import { AuthShell } from '@/components/auth/AuthShell';
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton';
-import { UnifyLogo } from '@/components/brand/UnifyLogo';
+import { BothLogo } from '@/components/brand/BothLogo';
 import { useGoogleAuth } from '@/hooks/useGoogleAuth';
 import { usePreferredColorScheme } from '@/hooks/usePreferredColorScheme';
 import { schemeTokens, space, type } from '@/lib/theme';
@@ -16,7 +16,7 @@ export default function SignUpScreen() {
   return (
     <AuthShell colors={colors} footer={<AuthFooter colors={colors} />}>
       <View style={styles.hero}>
-        <UnifyLogo colors={colors} />
+        <BothLogo colors={colors} />
         <Text
           style={[styles.title, { color: colors.text }]}
           accessibilityRole="header"
@@ -25,7 +25,7 @@ export default function SignUpScreen() {
           Crie sua conta
         </Text>
         <Text style={[styles.subtitle, { color: colors.muted }]} maxFontSizeMultiplier={1.4}>
-          O Unify cria sua conta com o Google. Cadastro com e-mail chega em breve.
+          O Both cria sua conta com o Google. Cadastro com e-mail chega em breve.
         </Text>
       </View>
 

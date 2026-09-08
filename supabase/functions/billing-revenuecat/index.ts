@@ -1,18 +1,19 @@
+import { authorizationBearerMatches } from '../_shared/auth-guards.ts';
 import { adminClient, handle, json } from '../_shared/function.ts';
 import { applyStoreEntitlement, recordBillingEvent } from '../_shared/billing/webhook-handler.ts';
 import { env, logSafe } from '../_shared/http.ts';
 
 /**
- * RevenueCat → Unify Pro entitlement.
+ * RevenueCat → Both Pro entitlement.
  * Configure webhook in RevenueCat dashboard to this function URL.
  * Auth: Authorization Bearer REVENUECAT_WEBHOOK_SECRET
  */
 Deno.serve((req) =>
   handle(req, async () => {
     const secret = env('REVENUECAT_WEBHOOK_SECRET');
-    const auth = req.headers.get('Authorization') ?? '';
-    const token = auth.replace(/^Bearer\s+/i, '').trim();
-    if (!token || token !== secret) throw new Error('UNAUTHENTICATED');
+    if (!authorizationBearerMatches(req.headers.get('Authorization'), secret)) {
+      throw new Error('UNAUTHENTICATED');
+    }
 
     const body = (await req.json()) as Record<string, unknown>;
     const event = (body.event ?? body) as Record<string, unknown>;

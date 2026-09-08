@@ -46,7 +46,9 @@ describe('notification presentation', () => {
 
   it('groups by today and yesterday', () => {
     const now = new Date();
-    const yesterday = new Date(now.getTime() - 36 * 60 * 60 * 1000);
+    const yesterday = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1, 15, 0, 0),
+    );
     const groups = groupNotifications(
       [
         item({ id: 'a', created_at: now.toISOString() }),

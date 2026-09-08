@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, TextInput, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { UnifyLogo } from '@/components/brand/UnifyLogo';
+import { BothLogo } from '@/components/brand/BothLogo';
 import { Button } from '@/components/ui/Button';
 import { Screen } from '@/components/ui/Screen';
 import { Typography } from '@/components/ui/Typography';
@@ -124,7 +124,7 @@ export default function PublicBookingPage() {
   if (step === 'done' && confirmation) {
     return (
       <Screen scroll>
-        <UnifyLogo colors={brand} size="sm" />
+        <BothLogo colors={brand} size="sm" />
         <Typography variant="pageTitle">Agendamento confirmado</Typography>
         <Typography variant="body">
           Reunião com {confirmation.hostName}
@@ -141,7 +141,7 @@ export default function PublicBookingPage() {
 
   return (
     <Screen scroll>
-      <UnifyLogo colors={brand} size="sm" />
+      <BothLogo colors={brand} size="sm" />
       <Typography variant="pageTitle">{hostName}</Typography>
       <Typography variant="sectionTitle">{title}</Typography>
       <Typography variant="caption" muted>
