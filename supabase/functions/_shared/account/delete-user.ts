@@ -3,7 +3,13 @@ import { decryptSecret } from '../crypto/tokens.ts';
 import { logSafe } from '../http.ts';
 import { getValidAccessToken, providerFor } from '../sync/runtime.ts';
 import type { ProviderName } from '../sync/types.ts';
-import { isSafeExternalCleanupError, revokeProviderAuthorization } from './oauth-revoke.ts';
+import {
+  AccountDeleteBlockedError,
+  isAuthExternalCleanupError,
+  isSafeExternalCleanupError,
+  isTransientExternalCleanupError,
+  revokeProviderAuthorization,
+} from './oauth-revoke.ts';
 
 export type DeleteAccountResult = {
   ok: true;
@@ -21,6 +27,7 @@ export type DeleteAccountDeps = {
 /**
  * Full Both account deletion for the authenticated userId (never from client body).
  * Idempotent where possible: missing external resources continue cleanup.
+ * Transient failures stopping watches/subscriptions ABORT before credentials are destroyed.
  */
 export async function deleteUserAccount(
   db: SupabaseClient,
@@ -123,8 +130,10 @@ async function cleanupConnectionExternal(
 ): Promise<void> {
   const { data: subs } = await db
     .from('webhook_subscriptions')
-    .select('id, external_subscription_id, external_resource_id, expires_at')
+    .select('id, external_subscription_id, external_resource_id, expires_at, status')
     .eq('connection_id', connectionId);
+
+  const activeSubs = (subs ?? []).filter((s) => s.status === 'active' || !s.status);
 
   let accessToken = '';
   let refreshToken = '';
@@ -137,12 +146,15 @@ async function cleanupConnectionExternal(
       provider,
       reason: isSafeExternalCleanupError(err) ? 'gone' : 'auth_or_error',
     });
+    if (activeSubs.length > 0 && isTransientExternalCleanupError(err)) {
+      throw new AccountDeleteBlockedError('external_cleanup_transient');
+    }
   }
 
   if (accessToken && provider !== 'ICLOUD') {
     try {
       const impl = deps.resolveProvider(provider);
-      for (const sub of subs ?? []) {
+      for (const sub of activeSubs) {
         try {
           await impl.deleteWebhookSubscription(accessToken, {
             externalSubscriptionId: String(sub.external_subscription_id),
@@ -150,14 +162,33 @@ async function cleanupConnectionExternal(
             expiresAt: String(sub.expires_at),
           });
         } catch (err) {
-          if (!isSafeExternalCleanupError(err)) {
-            logSafe('account_delete_webhook_stop_failed', { connectionId, provider });
+          if (isSafeExternalCleanupError(err)) {
+            continue;
           }
+          if (isTransientExternalCleanupError(err)) {
+            logSafe('account_delete_webhook_stop_blocked', { connectionId, provider, reason: 'transient' });
+            throw new AccountDeleteBlockedError('external_cleanup_transient');
+          }
+          if (isAuthExternalCleanupError(err)) {
+            logSafe('account_delete_webhook_stop_auth', { connectionId, provider });
+            continue;
+          }
+          logSafe('account_delete_webhook_stop_blocked', { connectionId, provider, reason: 'unknown' });
+          throw new AccountDeleteBlockedError('external_cleanup_failed');
         }
       }
-    } catch {
+    } catch (err) {
+      if (err instanceof AccountDeleteBlockedError) throw err;
+      if (isTransientExternalCleanupError(err)) {
+        throw new AccountDeleteBlockedError('external_cleanup_transient');
+      }
       logSafe('account_delete_webhook_stop_failed', { connectionId, provider });
+      throw new AccountDeleteBlockedError('external_cleanup_failed');
     }
+  } else if (!accessToken && activeSubs.length > 0 && provider !== 'ICLOUD') {
+    // No usable token (typically AUTH_REQUIRED): cannot stop provider resources.
+    // Continue local delete — orphan watches expire; user cannot re-auth mid-delete.
+    logSafe('account_delete_webhook_unstopped', { connectionId, provider, reason: 'no_access_token' });
   }
 
   try {
@@ -173,12 +204,13 @@ async function cleanupConnectionExternal(
     /* secrets may already be gone on retry */
   }
 
+  // OAuth grant revoke is best-effort and must not block account deletion.
   const revokeToken = refreshToken || accessToken;
   if (revokeToken) {
     await deps.revoke({ provider, token: revokeToken });
   }
 
-  if ((subs ?? []).length > 0) {
+  if (activeSubs.length > 0) {
     await db
       .from('webhook_subscriptions')
       .update({ status: 'expired' })

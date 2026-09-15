@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { AccountDeleteBlockedError } from './oauth-revoke.ts';
 import { deleteUserAccount } from './delete-user.ts';
 
 type TableState = Record<string, Array<Record<string, unknown>>>;
@@ -137,20 +138,21 @@ describe('deleteUserAccount', () => {
     expect(tables.billing_events[0]?.user_id).toBeNull();
   });
 
-  it('continues when external webhook stop already gone', async () => {
-    const { db } = createFakeDb({
+  function baseWithActiveSub(provider: 'GOOGLE' | 'MICROSOFT') {
+    return createFakeDb({
       sync_jobs: [],
-      calendar_connections: [{ id: 'c1', user_id: 'u1', provider: 'MICROSOFT' }],
+      calendar_connections: [{ id: 'c1', user_id: 'u1', provider }],
       webhook_subscriptions: [
         {
           id: 'w1',
           connection_id: 'c1',
           external_subscription_id: 'sub',
+          external_resource_id: 'res',
           expires_at: '2099-01-01',
           status: 'active',
         },
       ],
-      calendar_secrets: [],
+      calendar_secrets: [{ connection_id: 'c1', encrypted_refresh_token: 'enc' }],
       scheduling_links: [],
       oauth_states: [],
       notifications: [],
@@ -160,7 +162,10 @@ describe('deleteUserAccount', () => {
       calendar_firewall_rules: [],
       profiles: [{ id: 'u1' }],
     });
+  }
 
+  it('continues when provider returns 404 (idempotent missing)', async () => {
+    const { db, tables, authDelete } = baseWithActiveSub('MICROSOFT');
     const result = await deleteUserAccount(db, 'u1', 'test-key', {
       getAccessToken: async () => ({ accessToken: 'access', provider: 'MICROSOFT', userId: 'u1' }),
       revoke: async () => 'skipped',
@@ -173,6 +178,92 @@ describe('deleteUserAccount', () => {
     });
     expect(result.ok).toBe(true);
     expect(result.authDeleted).toBe(true);
+    expect(authDelete).toHaveBeenCalled();
+    expect(tables.calendar_connections).toHaveLength(0);
+    expect(tables.profiles).toHaveLength(0);
+  });
+
+  it('continues when provider returns 410 (gone)', async () => {
+    const { db, tables } = baseWithActiveSub('GOOGLE');
+    const result = await deleteUserAccount(db, 'u1', 'test-key', {
+      getAccessToken: async () => ({ accessToken: 'access', provider: 'GOOGLE', userId: 'u1' }),
+      revoke: async () => 'failed',
+      providerForFn: () =>
+        ({
+          deleteWebhookSubscription: async () => {
+            throw Object.assign(new Error('gone'), { httpStatus: 410 });
+          },
+        }) as ReturnType<NonNullable<Parameters<typeof deleteUserAccount>[3]>['providerForFn']>,
+    });
+    expect(result.ok).toBe(true);
+    expect(tables.calendar_connections).toHaveLength(0);
+    expect(tables.profiles).toHaveLength(0);
+  });
+
+  it('aborts on provider 429 and preserves credentials', async () => {
+    const { db, tables, authDelete } = baseWithActiveSub('GOOGLE');
+    await expect(
+      deleteUserAccount(db, 'u1', 'test-key', {
+        getAccessToken: async () => ({ accessToken: 'access', provider: 'GOOGLE', userId: 'u1' }),
+        revoke: async () => 'revoked',
+        providerForFn: () =>
+          ({
+            deleteWebhookSubscription: async () => {
+              throw Object.assign(new Error('rate'), {
+                httpStatus: 429,
+                code: 'RATE_LIMITED',
+              });
+            },
+          }) as ReturnType<NonNullable<Parameters<typeof deleteUserAccount>[3]>['providerForFn']>,
+      }),
+    ).rejects.toBeInstanceOf(AccountDeleteBlockedError);
+    expect(tables.calendar_connections).toHaveLength(1);
+    expect(tables.calendar_secrets).toHaveLength(1);
+    expect(tables.profiles).toHaveLength(1);
+    expect(authDelete).not.toHaveBeenCalled();
+  });
+
+  it('aborts on provider 5xx and preserves credentials', async () => {
+    const { db, tables, authDelete } = baseWithActiveSub('MICROSOFT');
+    await expect(
+      deleteUserAccount(db, 'u1', 'test-key', {
+        getAccessToken: async () => ({ accessToken: 'access', provider: 'MICROSOFT', userId: 'u1' }),
+        revoke: async () => 'skipped',
+        providerForFn: () =>
+          ({
+            deleteWebhookSubscription: async () => {
+              throw Object.assign(new Error('unavailable'), {
+                httpStatus: 503,
+                code: 'PROVIDER_UNAVAILABLE',
+              });
+            },
+          }) as ReturnType<NonNullable<Parameters<typeof deleteUserAccount>[3]>['providerForFn']>,
+      }),
+    ).rejects.toBeInstanceOf(AccountDeleteBlockedError);
+    expect(tables.calendar_connections).toHaveLength(1);
+    expect(tables.calendar_secrets).toHaveLength(1);
+    expect(tables.profiles).toHaveLength(1);
+    expect(authDelete).not.toHaveBeenCalled();
+  });
+
+  it('aborts on provider timeout and preserves credentials', async () => {
+    const { db, tables, authDelete } = baseWithActiveSub('GOOGLE');
+    await expect(
+      deleteUserAccount(db, 'u1', 'test-key', {
+        getAccessToken: async () => ({ accessToken: 'access', provider: 'GOOGLE', userId: 'u1' }),
+        revoke: async () => 'revoked',
+        providerForFn: () =>
+          ({
+            deleteWebhookSubscription: async () => {
+              throw Object.assign(new Error('timeout'), { code: 'TIMEOUT' });
+            },
+          }) as ReturnType<NonNullable<Parameters<typeof deleteUserAccount>[3]>['providerForFn']>,
+      }),
+    ).rejects.toBeInstanceOf(AccountDeleteBlockedError);
+    expect(tables.calendar_connections).toHaveLength(1);
+    expect(tables.calendar_secrets).toHaveLength(1);
+    expect(tables.profiles).toHaveLength(1);
+    expect(authDelete).not.toHaveBeenCalled();
   });
 
   it('treats auth user already missing as success', async () => {

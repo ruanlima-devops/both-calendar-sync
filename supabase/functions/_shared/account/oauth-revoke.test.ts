@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { isSafeExternalCleanupError, revokeProviderAuthorization } from './oauth-revoke.ts';
+import {
+  isAuthExternalCleanupError,
+  isSafeExternalCleanupError,
+  isTransientExternalCleanupError,
+  revokeProviderAuthorization,
+} from './oauth-revoke.ts';
 
 describe('oauth revoke (account deletion)', () => {
   it('revokes Google token successfully', async () => {
@@ -46,5 +51,46 @@ describe('oauth revoke (account deletion)', () => {
     expect(isSafeExternalCleanupError(Object.assign(new Error('gone'), { httpStatus: 404 }))).toBe(true);
     expect(isSafeExternalCleanupError(Object.assign(new Error('gone'), { httpStatus: 410 }))).toBe(true);
     expect(isSafeExternalCleanupError(new Error('boom'))).toBe(false);
+  });
+
+  it('classifies transient provider failures', () => {
+    expect(
+      isTransientExternalCleanupError(
+        Object.assign(new Error('rate'), { httpStatus: 429, code: 'RATE_LIMITED' }),
+      ),
+    ).toBe(true);
+    expect(
+      isTransientExternalCleanupError(
+        Object.assign(new Error('down'), { httpStatus: 503, code: 'PROVIDER_UNAVAILABLE' }),
+      ),
+    ).toBe(true);
+    expect(
+      isTransientExternalCleanupError(Object.assign(new Error('timeout'), { code: 'TIMEOUT' })),
+    ).toBe(true);
+    expect(isTransientExternalCleanupError(Object.assign(new Error('gone'), { httpStatus: 404 }))).toBe(
+      false,
+    );
+  });
+
+  it('classifies auth cleanup failures', () => {
+    expect(
+      isAuthExternalCleanupError(Object.assign(new Error('auth'), { httpStatus: 401, code: 'AUTH_REQUIRED' })),
+    ).toBe(true);
+    expect(
+      isAuthExternalCleanupError(
+        Object.assign(new Error('perm'), { httpStatus: 403, code: 'PERMISSION_ERROR' }),
+      ),
+    ).toBe(true);
+  });
+
+  it('returns failed on Google revoke 5xx without throwing', async () => {
+    const fetchImpl = vi.fn(async () => new Response('err', { status: 500 }));
+    await expect(
+      revokeProviderAuthorization({
+        provider: 'GOOGLE',
+        token: 'x',
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      }),
+    ).resolves.toBe('failed');
   });
 });
