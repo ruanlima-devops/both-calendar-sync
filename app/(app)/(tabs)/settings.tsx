@@ -12,6 +12,7 @@ import { Typography } from '@/components/ui/Typography';
 import { useSession } from '@/context/session';
 import { useEntitlement } from '@/context/entitlement';
 import { useToast } from '@/context/toast';
+import { DELETE_ACCOUNT_ALERT } from '@/lib/account/delete-account';
 import { statusLabel } from '@/lib/billing/entitlement';
 import { openBillingPortal } from '@/lib/billing/client';
 import { billingProviderLabel } from '@/lib/billing/purchases';
@@ -87,30 +88,28 @@ export default function AccountScreen() {
   }
 
   async function deleteAccount() {
-    Alert.alert(
-      'Excluir conta',
-      'Isso remove seu perfil, calendários conectados e todos os eventos. Esta ação não pode ser desfeita.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Excluir',
-          style: 'destructive',
-          onPress: () => {
-            void (async () => {
-              setDeleting(true);
-              try {
-                await invokeFunction('delete-account');
-                await supabase.auth.signOut();
-              } catch (err) {
-                Alert.alert('Both', friendlyError(err, 'Não foi possível excluir a conta.'));
-              } finally {
-                setDeleting(false);
-              }
-            })();
-          },
+    if (deleting) return;
+    Alert.alert(DELETE_ACCOUNT_ALERT.title, DELETE_ACCOUNT_ALERT.message, [
+      { text: DELETE_ACCOUNT_ALERT.cancel, style: 'cancel' },
+      {
+        text: DELETE_ACCOUNT_ALERT.confirm,
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            if (deleting) return;
+            setDeleting(true);
+            try {
+              await invokeFunction('delete-account');
+              await supabase.auth.signOut({ scope: 'local' });
+            } catch (err) {
+              Alert.alert('Both', friendlyError(err, 'Não foi possível excluir a conta.'));
+            } finally {
+              setDeleting(false);
+            }
+          })();
         },
-      ],
-    );
+      },
+    ]);
   }
 
   return (
@@ -415,6 +414,13 @@ export default function AccountScreen() {
           variant="danger"
           onPress={() => void deleteAccount()}
           loading={deleting}
+          disabled={deleting}
+        />
+        <Button
+          label="Excluir com confirmação por texto…"
+          variant="ghost"
+          onPress={() => router.push('/delete-account' as Href)}
+          disabled={deleting}
         />
       </Card>
     </Screen>
