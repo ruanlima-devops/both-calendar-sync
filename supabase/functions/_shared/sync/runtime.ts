@@ -656,7 +656,22 @@ export async function processSyncJob(db: SupabaseClient, jobId: string): Promise
       .select('status')
       .eq('id', claimed.connection_id)
       .maybeSingle();
-    if (connRow?.status === 'AUTH_REQUIRED') {
+    if (!connRow) {
+      await db
+        .from('sync_jobs')
+        .update({
+          status: 'failed',
+          error: 'connection_gone',
+          completed_at: new Date().toISOString(),
+        })
+        .eq('id', jobId);
+      logSafe('[calendar-sync] job_skipped_connection_gone', {
+        connectionId: claimed.connection_id,
+        calendarId: claimed.connected_calendar_id,
+      });
+      return;
+    }
+    if (connRow.status === 'AUTH_REQUIRED') {
       await db
         .from('sync_jobs')
         .update({
