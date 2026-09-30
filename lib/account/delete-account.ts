@@ -11,3 +11,12 @@ export const DELETE_ACCOUNT_ALERT = {
   cancel: 'Cancelar',
   confirm: 'Excluir',
 } as const;
+
+export async function confirmAndDeleteAccount(deps: {
+  confirm: () => Promise<boolean>;
+  deleteAccount: () => Promise<void>;
+}): Promise<boolean> {
+  if (!(await deps.confirm())) return false;
+  await deps.deleteAccount();
+  return true;
+}
