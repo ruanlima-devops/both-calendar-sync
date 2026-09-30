@@ -12,12 +12,14 @@ import { Typography } from '@/components/ui/Typography';
 import { useSession } from '@/context/session';
 import { useEntitlement } from '@/context/entitlement';
 import { useToast } from '@/context/toast';
-import { DELETE_ACCOUNT_ALERT } from '@/lib/account/delete-account';
+import { deleteAccountAndSignOut } from '@/lib/account/client';
+import { confirmAndDeleteAccount, DELETE_ACCOUNT_ALERT } from '@/lib/account/delete-account';
 import { statusLabel } from '@/lib/billing/entitlement';
 import { openBillingPortal } from '@/lib/billing/client';
 import { billingProviderLabel } from '@/lib/billing/purchases';
+import { confirmAction, showMessage } from '@/lib/confirm';
 import { friendlyError } from '@/lib/errors';
-import { invokeFunction, supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { listTimezones, timezoneLabel } from '@/lib/timezones';
 import type { ColorSchemePreference } from '@/lib/types';
 
@@ -89,27 +91,19 @@ export default function AccountScreen() {
 
   async function deleteAccount() {
     if (deleting) return;
-    Alert.alert(DELETE_ACCOUNT_ALERT.title, DELETE_ACCOUNT_ALERT.message, [
-      { text: DELETE_ACCOUNT_ALERT.cancel, style: 'cancel' },
-      {
-        text: DELETE_ACCOUNT_ALERT.confirm,
-        style: 'destructive',
-        onPress: () => {
-          void (async () => {
-            if (deleting) return;
-            setDeleting(true);
-            try {
-              await invokeFunction('delete-account');
-              await supabase.auth.signOut({ scope: 'local' });
-            } catch (err) {
-              Alert.alert('Both', friendlyError(err, 'Não foi possível excluir a conta.'));
-            } finally {
-              setDeleting(false);
-            }
-          })();
+    try {
+      await confirmAndDeleteAccount({
+        confirm: () => confirmAction({ ...DELETE_ACCOUNT_ALERT, destructive: true }),
+        deleteAccount: async () => {
+          setDeleting(true);
+          await deleteAccountAndSignOut();
         },
-      },
-    ]);
+      });
+    } catch (err) {
+      showMessage('Both', friendlyError(err, 'Não foi possível excluir a conta.'));
+    } finally {
+      setDeleting(false);
+    }
   }
 
   return (

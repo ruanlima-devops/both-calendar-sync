@@ -6,12 +6,12 @@ import { Input } from '@/components/ui/Input';
 import { Screen } from '@/components/ui/Screen';
 import { Typography } from '@/components/ui/Typography';
 import { useSession } from '@/context/session';
+import { deleteAccountAndSignOut } from '@/lib/account/client';
 import {
   DELETE_ACCOUNT_CONFIRM_WORD,
   isDeleteAccountConfirmPhrase,
 } from '@/lib/account/delete-account';
 import { friendlyError } from '@/lib/errors';
-import { invokeFunction, supabase } from '@/lib/supabase';
 import { space } from '@/lib/theme';
 
 export default function DeleteAccountPage() {
@@ -31,8 +31,7 @@ export default function DeleteAccountPage() {
     setBusy(true);
     setError(null);
     try {
-      await invokeFunction('delete-account');
-      await supabase.auth.signOut({ scope: 'local' });
+      await deleteAccountAndSignOut();
       setDone(true);
     } catch (err) {
       setError(friendlyError(err, 'Não foi possível excluir a conta.'));
