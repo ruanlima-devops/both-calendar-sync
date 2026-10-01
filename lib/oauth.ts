@@ -1,12 +1,17 @@
 import { Platform } from 'react-native';
 import * as Linking from 'expo-linking';
 import { makeRedirectUri } from 'expo-auth-session';
+import * as Crypto from 'expo-crypto';
 import * as WebBrowser from 'expo-web-browser';
 import { APP_SCHEME, OAUTH_PATH } from '@/lib/app';
 import {
   consumeOAuthComplete,
+  encodeClientNonce,
   OAUTH_MESSAGE_TYPE,
   OAUTH_POPUP_NAME,
+  OAUTH_TICKET_PARAM,
+  rememberOAuthNonce,
+  takeOAuthNonce,
   withOAuthPopupMarker,
   type OAuthCompletePayload,
 } from '@/lib/oauth-complete';
@@ -24,7 +29,17 @@ type OAuthFunctionResponse = {
   error?: string;
 };
 
-type PopupResult = { outcome: 'ok' | 'error' | 'cancel'; error?: string | null };
+type PopupResult = { outcome: 'ok' | 'error' | 'cancel'; error?: string | null; ticket?: string | null };
+
+/** Web keeps the client nonce in this tab's sessionStorage; native keeps it in memory only. */
+function nonceStorage(): Storage | null {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return null;
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
 
 /** Return URL registered in oauth_states and matched after provider callback. */
 export function getCalendarOAuthRedirectUri(): string {
@@ -32,26 +47,6 @@ export function getCalendarOAuthRedirectUri(): string {
     return withOAuthPopupMarker(makeRedirectUri({ path: OAUTH_PATH }));
   }
   return Linking.createURL(OAUTH_PATH, { scheme: APP_SCHEME });
-}
-
-function allowedMessageOrigins(): Set<string> {
-  const origins = new Set<string>();
-  if (typeof window !== 'undefined') {
-    origins.add(window.location.origin);
-  }
-  const supabase = supabaseOrigin();
-  if (supabase) origins.add(supabase);
-  return origins;
-}
-
-function supabaseOrigin(): string | null {
-  const raw = process.env.EXPO_PUBLIC_SUPABASE_URL;
-  if (!raw) return null;
-  try {
-    return new URL(raw).origin;
-  } catch {
-    return null;
-  }
 }
 
 function openWebOAuthPopup(url: string): Window | null {
@@ -71,7 +66,7 @@ function payloadToResult(payload: OAuthCompletePayload, provider: 'google' | 'mi
   if (payload.provider && payload.provider !== provider) {
     return { outcome: 'error', error: 'provider_mismatch' };
   }
-  if (payload.ok) return { outcome: 'ok' };
+  if (payload.ok) return { outcome: 'ok', ticket: payload.ticket ?? null };
   if (payload.error === 'access_denied') return { outcome: 'cancel' };
   return { outcome: 'error', error: payload.error };
 }
@@ -80,7 +75,6 @@ function waitForWebOAuthResult(
   provider: 'google' | 'microsoft',
   popupWindow: Window | null,
 ): { promise: Promise<PopupResult>; stop: () => void } {
-  const allowed = allowedMessageOrigins();
   let storageTimer: number | undefined;
   let popupTimer: number | undefined;
   let stop = () => {};
@@ -98,12 +92,13 @@ function waitForWebOAuthResult(
     };
 
     const onMessage = (event: MessageEvent) => {
-      if (allowed.size > 0 && !allowed.has(event.origin)) return;
+      if (event.origin !== window.location.origin) return;
       const data = event.data as {
         type?: string;
         ok?: boolean;
         provider?: string;
         error?: string | null;
+        ticket?: string | null;
       } | null;
       if (!data || data.type !== OAUTH_MESSAGE_TYPE) return;
       if (data.provider && data.provider !== provider) return;
@@ -116,6 +111,7 @@ function waitForWebOAuthResult(
         ok: Boolean(data.ok),
         provider: (data.provider as OAuthCompletePayload['provider']) ?? provider,
         error: data.error ?? null,
+        ticket: data.ticket ?? null,
       }, provider));
     };
 
@@ -155,8 +151,8 @@ function waitForWebOAuthResult(
   return { promise, stop };
 }
 
-function errorFromUrl(url: string): string | null {
-  const raw = url.match(/[?&]oauth_error=([^&]+)/)?.[1];
+function queryParam(url: string, name: string): string | null {
+  const raw = url.match(new RegExp(`[?&]${name}=([^&#]+)`))?.[1];
   if (!raw) return null;
   try {
     return decodeURIComponent(raw.replace(/\+/g, ' '));
@@ -166,21 +162,35 @@ function errorFromUrl(url: string): string | null {
 }
 
 function outcomeFromUrl(url: string): 'ok' | 'error' | 'cancel' {
-  const error = errorFromUrl(url);
+  const error = queryParam(url, 'oauth_error');
   if (error === 'access_denied') return 'cancel';
   if (error) return 'error';
-  if (/[?&]connected=(google|microsoft)/.test(url)) return 'ok';
+  if (queryParam(url, OAUTH_TICKET_PARAM)) return 'ok';
   return 'error';
+}
+
+/** Authenticated finalize: the backend checks user, client nonce, provider and ticket before connecting. */
+export async function finalizeCalendarOAuth(
+  provider: 'google' | 'microsoft',
+  ticket: string,
+  clientNonce: string,
+): Promise<void> {
+  await invokeFunction(`${provider}-oauth`, { action: 'finalize', ticket, client_nonce: clientNonce });
 }
 
 /**
  * Connect Google/Microsoft Calendar.
  * Web: dedicated popup + postMessage/localStorage bridge.
  * Native: secure browser → variant scheme (`both-dev` / `both-stg` / `both`) `://oauth`.
+ * The provider callback only issues a completion ticket; this window finalizes it.
  */
 export async function connectCalendar(provider: 'google' | 'microsoft'): Promise<'connected' | 'cancelled'> {
   const redirect = getCalendarOAuthRedirectUri();
-  const data = await invokeFunction<OAuthFunctionResponse>(`${provider}-oauth`, { redirect });
+  const clientNonce = encodeClientNonce(await Crypto.getRandomBytesAsync(32));
+  const data = await invokeFunction<OAuthFunctionResponse>(`${provider}-oauth`, {
+    redirect,
+    client_nonce: clientNonce,
+  });
   const authorizationUrl = data.authorizationUrl;
   if (!authorizationUrl) {
     throw new Error(data.error ?? USER_ERROR);
@@ -189,19 +199,25 @@ export async function connectCalendar(provider: 'google' | 'microsoft'): Promise
   let outcome: 'ok' | 'error' | 'cancel' = 'ok';
   let popupError: string | null = null;
   let callbackUrl: string | undefined;
+  let ticket: string | null = null;
+  let boundNonce: string | null = clientNonce;
 
   if (Platform.OS === 'web') {
     const popupWindow = openWebOAuthPopup(authorizationUrl);
     if (!popupWindow) {
       throw new Error(WEB_POPUP_BLOCKED);
     }
+    const storage = nonceStorage();
+    if (storage) rememberOAuthNonce(storage, provider, clientNonce);
     const waiter = waitForWebOAuthResult(provider, popupWindow);
     try {
       const result = await waiter.promise;
       outcome = result.outcome;
       popupError = result.error ?? null;
+      ticket = result.ticket ?? null;
     } finally {
       waiter.stop();
+      if (storage) boundNonce = takeOAuthNonce(storage, provider);
     }
   } else {
     const session = await WebBrowser.openAuthSessionAsync(authorizationUrl, redirect);
@@ -209,13 +225,16 @@ export async function connectCalendar(provider: 'google' | 'microsoft'): Promise
     else if (session.type === 'success' && session.url) {
       callbackUrl = session.url;
       outcome = outcomeFromUrl(session.url);
+      ticket = queryParam(session.url, OAUTH_TICKET_PARAM);
     } else outcome = 'error';
   }
 
   if (outcome === 'cancel') return 'cancelled';
   if (outcome === 'error') {
-    const detail = popupError ?? (callbackUrl ? errorFromUrl(callbackUrl) : null);
+    const detail = popupError ?? (callbackUrl ? queryParam(callbackUrl, 'oauth_error') : null);
     throw new Error(detail ?? USER_ERROR);
   }
+  if (!ticket || !boundNonce) throw new Error('invalid_ticket');
+  await finalizeCalendarOAuth(provider, ticket, boundNonce);
   return 'connected';
 }

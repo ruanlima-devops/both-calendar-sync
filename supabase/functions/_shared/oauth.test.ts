@@ -11,6 +11,8 @@ import {
 } from './oauth.ts';
 
 const APP = 'http://localhost:8081/oauth?popup=1';
+const TICKET = 'A'.repeat(43);
+const NONCE = 'b'.repeat(64);
 
 beforeEach(() => {
   stubDenoEnv({ APP_URL: 'https://app.example.test' });
@@ -23,16 +25,16 @@ function session(overrides: Partial<ConsumedOAuthState> = {}): ConsumedOAuthStat
 
 describe('oauthCallbackRedirect', () => {
   it.each(['google', 'microsoft'] as const)('%s success redirects to the app instead of rendering HTML', async (provider) => {
-    const res = oauthCallbackRedirect({ ok: true, provider, redirectTo: APP });
+    const res = oauthCallbackRedirect({ provider, redirectTo: APP, ticket: TICKET });
     expect(res.status).toBe(302);
-    expect(res.headers.get('Location')).toBe(`${APP}&connected=${provider}`);
+    expect(res.headers.get('Location')).toBe(`${APP}&oauth_ticket=${TICKET}&provider=${provider}`);
     expect(res.headers.get('Content-Type')).toBeNull();
     expect(res.headers.get('Cache-Control')).toBe('no-store');
     expect(await res.text()).toBe('');
   });
 
   it('carries only a safe error code on failure', () => {
-    const res = oauthCallbackRedirect({ ok: false, provider: 'microsoft', redirectTo: 'http://localhost:8081/oauth', error: 'invalid_state' });
+    const res = oauthCallbackRedirect({ provider: 'microsoft', redirectTo: 'http://localhost:8081/oauth', error: 'invalid_state' });
     expect(res.status).toBe(302);
     expect(res.headers.get('Location')).toBe('http://localhost:8081/oauth?oauth_error=invalid_state&provider=microsoft');
   });
@@ -42,14 +44,14 @@ describe('oauthCallbackRedirect', () => {
     'exp://192.168.0.10:8081/--/oauth',
     'https://app.example.test/oauth',
   ])('redirects native and hosted returns too (%s)', (redirectTo) => {
-    const res = oauthCallbackRedirect({ ok: true, provider: 'google', redirectTo });
+    const res = oauthCallbackRedirect({ provider: 'google', redirectTo, ticket: TICKET });
     expect(res.status).toBe(302);
-    expect(res.headers.get('Location')).toBe(`${redirectTo}?connected=google`);
+    expect(res.headers.get('Location')).toBe(`${redirectTo}?oauth_ticket=${TICKET}&provider=google`);
   });
 
   it('never leaks code or state into the app URL', () => {
-    const location = oauthCallbackRedirect({ ok: true, provider: 'google', redirectTo: APP }).headers.get('Location')!;
-    expect(location).not.toMatch(/code=|state=|token/);
+    const location = oauthCallbackRedirect({ provider: 'google', redirectTo: APP, ticket: TICKET }).headers.get('Location')!;
+    expect(location).not.toMatch(/[?&]code=|state=|access_token|refresh_token|verifier|nonce/);
   });
 
   it('falls back to the app /oauth route when the state (and its redirect) is unknown', () => {
@@ -92,7 +94,7 @@ describe('oauth state lifecycle', () => {
         { id: 'other', user_id: 'u2', state: 'other', expires_at: '2000-01-01T00:00:00.000Z' },
       ],
     });
-    const state = await createOAuthState(db, { userId: 'u1', provider: 'GOOGLE', verifier: 'ver', redirect: APP });
+    const state = await createOAuthState(db, { userId: 'u1', provider: 'GOOGLE', verifier: 'ver', redirect: APP, clientNonce: NONCE });
     expect(state).toMatch(/^[0-9a-f]{64}$/);
     const row = tables.oauth_states.find((r) => r.state === state)!;
     expect(row).toMatchObject({ user_id: 'u1', provider: 'GOOGLE', code_verifier: 'ver', redirect_to: APP });
@@ -105,7 +107,7 @@ describe('oauth state lifecycle', () => {
 
   it('consumes a valid state once; a repeated callback is rejected', async () => {
     const { db, tables } = createFakeDb();
-    const state = await createOAuthState(db, { userId: 'u1', provider: 'MICROSOFT', verifier: 'ver', redirect: APP });
+    const state = await createOAuthState(db, { userId: 'u1', provider: 'MICROSOFT', verifier: 'ver', redirect: APP, clientNonce: NONCE });
     const first = await consumeOAuthState(db, state, 'MICROSOFT');
     expect(first).toMatchObject({ userId: 'u1', verifier: 'ver', redirect: APP, provider: 'MICROSOFT' });
     expect(tables.oauth_states).toHaveLength(0);

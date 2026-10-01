@@ -47,6 +47,14 @@ export function createFakeDb(initial: Tables = {}) {
         filters.push((row) => String(row[col]) < value);
         return builder;
       },
+      gt(col: string, value: string) {
+        filters.push((row) => String(row[col]) > value);
+        return builder;
+      },
+      is(col: string, value: null) {
+        filters.push((row) => (row[col] ?? null) === value);
+        return builder;
+      },
       insert(rows: Row | Row[]) {
         mode = 'insert';
         payload = rows;
