@@ -1,7 +1,10 @@
-import { useEffect } from 'react';
-import { ActivityIndicator, Alert, Platform, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Platform, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Typography } from '@/components/ui/Typography';
+import { showMessage } from '@/lib/confirm';
 import {
+  isOAuthPopupReturn,
   notifyOAuthOpener,
   persistOAuthComplete,
   type OAuthCompletePayload,
@@ -9,12 +12,19 @@ import {
 
 export default function OAuthComplete() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ oauth_error?: string; connected?: string; provider?: string }>();
+  const params = useLocalSearchParams<{
+    oauth_error?: string;
+    connected?: string;
+    provider?: string;
+    popup?: string;
+  }>();
+  const [popupFinished, setPopupFinished] = useState(false);
 
   useEffect(() => {
-    const error = Array.isArray(params.oauth_error) ? params.oauth_error[0] : params.oauth_error;
-    const connected = Array.isArray(params.connected) ? params.connected[0] : params.connected;
-    const providerParam = Array.isArray(params.provider) ? params.provider[0] : params.provider;
+    const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
+    const error = first(params.oauth_error);
+    const connected = first(params.connected);
+    const providerParam = first(params.provider);
     const provider = (connected ?? providerParam ?? null) as OAuthCompletePayload['provider'];
     const payload: OAuthCompletePayload = {
       ok: !error,
@@ -25,22 +35,27 @@ export default function OAuthComplete() {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       persistOAuthComplete(payload);
       const delivered = notifyOAuthOpener(payload);
-      if (delivered) {
+      if (delivered || isOAuthPopupReturn({ popupParam: first(params.popup), windowName: window.name })) {
         window.close();
+        setPopupFinished(true);
         return;
       }
     }
 
     if (error && error !== 'access_denied') {
       const label = provider === 'microsoft' ? 'Microsoft' : 'Google';
-      Alert.alert('Both', `Não foi possível conectar sua conta ${label}. Tente novamente.`);
+      showMessage('Both', `Não foi possível conectar sua conta ${label}. Tente novamente.`);
     }
     router.replace('/(app)/(tabs)/calendars');
-  }, [params.connected, params.oauth_error, params.provider, router]);
+  }, [params.connected, params.oauth_error, params.provider, params.popup, router]);
 
   return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-      <ActivityIndicator />
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      {popupFinished ? (
+        <Typography variant="body">Pronto. Você já pode fechar esta janela e voltar ao Both.</Typography>
+      ) : (
+        <ActivityIndicator />
+      )}
     </View>
   );
 }

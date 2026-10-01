@@ -6,6 +6,8 @@ import { APP_SCHEME, OAUTH_PATH } from '@/lib/app';
 import {
   consumeOAuthComplete,
   OAUTH_MESSAGE_TYPE,
+  OAUTH_POPUP_NAME,
+  withOAuthPopupMarker,
   type OAuthCompletePayload,
 } from '@/lib/oauth-complete';
 import { invokeFunction } from '@/lib/supabase';
@@ -27,7 +29,7 @@ type PopupResult = { outcome: 'ok' | 'error' | 'cancel'; error?: string | null }
 /** Return URL registered in oauth_states and matched after provider callback. */
 export function getCalendarOAuthRedirectUri(): string {
   if (Platform.OS === 'web') {
-    return makeRedirectUri({ path: OAUTH_PATH });
+    return withOAuthPopupMarker(makeRedirectUri({ path: OAUTH_PATH }));
   }
   return Linking.createURL(OAUTH_PATH, { scheme: APP_SCHEME });
 }
@@ -60,7 +62,7 @@ function openWebOAuthPopup(url: string): Window | null {
   const top = window.screenY + Math.max(0, (window.outerHeight - height) / 2);
   return window.open(
     url,
-    'both-calendar-oauth',
+    OAUTH_POPUP_NAME,
     `popup=yes,toolbar=no,menubar=no,width=${width},height=${height},left=${left},top=${top}`,
   );
 }
@@ -176,7 +178,7 @@ function outcomeFromUrl(url: string): 'ok' | 'error' | 'cancel' {
  * Web: dedicated popup + postMessage/localStorage bridge.
  * Native: secure browser → variant scheme (`both-dev` / `both-stg` / `both`) `://oauth`.
  */
-export async function connectCalendar(provider: 'google' | 'microsoft'): Promise<void> {
+export async function connectCalendar(provider: 'google' | 'microsoft'): Promise<'connected' | 'cancelled'> {
   const redirect = getCalendarOAuthRedirectUri();
   const data = await invokeFunction<OAuthFunctionResponse>(`${provider}-oauth`, { redirect });
   const authorizationUrl = data.authorizationUrl;
@@ -210,9 +212,10 @@ export async function connectCalendar(provider: 'google' | 'microsoft'): Promise
     } else outcome = 'error';
   }
 
-  if (outcome === 'cancel') return;
+  if (outcome === 'cancel') return 'cancelled';
   if (outcome === 'error') {
     const detail = popupError ?? (callbackUrl ? errorFromUrl(callbackUrl) : null);
     throw new Error(detail ?? USER_ERROR);
   }
+  return 'connected';
 }

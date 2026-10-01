@@ -5,7 +5,7 @@ export type RevokeResult = 'revoked' | 'already_gone' | 'skipped' | 'failed';
 
 /**
  * Best-effort provider authorization cleanup for account deletion / disconnect.
- * Never logs token values. M3-003 may harden Microsoft further.
+ * Never logs token values.
  *
  * Distinct from operational webhook/subscription cleanup: revoke removes the OAuth
  * grant; watches/subscriptions are separate provider resources that must be stopped
@@ -40,9 +40,11 @@ export async function revokeProviderAuthorization(input: {
   }
 
   if (input.provider === 'MICROSOFT') {
-    // Discarding tokens + deleting Graph subscriptions is the reliable cleanup for Both 1.0.
-    // Full refresh-token revocation across tenants is deferred to M3-003 hardening.
-    logSafe('oauth_revoke_skipped', { provider: 'MICROSOFT', reason: 'deferred_m3_003' });
+    // Microsoft identity platform has no RFC 7009 endpoint for a single app's refresh token.
+    // revokeSignInSessions invalidates every app's tokens for the user (and is unsupported for
+    // personal accounts); deleting oauth2PermissionGrants needs admin-level Graph permissions.
+    // Cleanup is therefore: delete Graph subscriptions + destroy the stored credentials.
+    logSafe('oauth_revoke_skipped', { provider: 'MICROSOFT', reason: 'no_app_scoped_revoke' });
     return 'skipped';
   }
 

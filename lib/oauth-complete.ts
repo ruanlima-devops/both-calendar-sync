@@ -1,5 +1,19 @@
 export const OAUTH_COMPLETE_STORAGE_KEY = 'both-calendar-oauth-complete';
 export const OAUTH_MESSAGE_TYPE = 'unify-calendar-oauth';
+export const OAUTH_POPUP_NAME = 'both-calendar-oauth';
+export const OAUTH_POPUP_PARAM = 'popup';
+
+/** Marks the web return URL so /oauth knows it runs inside the OAuth popup. */
+export function withOAuthPopupMarker(redirect: string): string {
+  const url = new URL(redirect);
+  url.searchParams.set(OAUTH_POPUP_PARAM, '1');
+  return url.toString();
+}
+
+/** Provider login pages sever window.opener, so the popup is detected by marker or window name. */
+export function isOAuthPopupReturn(input: { popupParam?: string | null; windowName?: string | null }): boolean {
+  return input.popupParam === '1' || input.windowName === OAUTH_POPUP_NAME;
+}
 
 export type OAuthCompletePayload = {
   ok: boolean;

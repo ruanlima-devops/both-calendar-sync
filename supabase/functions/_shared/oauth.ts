@@ -50,6 +50,11 @@ export function defaultAppRedirect(): string {
   throw new Error('invalid_oauth_redirect');
 }
 
+/** Callback return when the state (and its redirect) is unknown: the app `/oauth` route can still close a popup. */
+export function defaultOAuthReturn(): string {
+  return new URL('/oauth', defaultAppRedirect()).toString();
+}
+
 /** Prevent open redirects after calendar OAuth. */
 export function assertSafeAppRedirect(redirect: string): string {
   const value = redirect.trim();
@@ -131,6 +136,7 @@ export async function createOAuthState(
   input: { userId: string; provider: OAuthProvider; verifier: string; redirect: string },
 ): Promise<string> {
   const state = randomHex(32);
+  await oauthStates(db).delete().eq('user_id', input.userId).lt('expires_at', new Date().toISOString());
   const { error } = await oauthStates(db).insert({
     user_id: input.userId,
     provider: input.provider,
@@ -200,105 +206,55 @@ export async function consumeOAuthState(
   };
 }
 
-export function oauthResultPage(input: {
+export type OAuthCallbackParams = { error: string | null; code: string | null; state: string };
+
+export type OAuthCallbackError =
+  | 'access_denied'
+  | 'provider_error'
+  | 'invalid_state'
+  | 'missing_code'
+  | 'token_exchange_failed';
+
+/** Provider redirects always carry `state`, `code` or `error`; the start request carries none. */
+export function oauthCallbackParams(url: URL): OAuthCallbackParams | null {
+  const error = url.searchParams.get('error');
+  const code = url.searchParams.get('code');
+  if (!error && !code && !url.searchParams.has('state')) return null;
+  return { error, code, state: url.searchParams.get('state') ?? '' };
+}
+
+export function oauthCallbackRejection(
+  params: OAuthCallbackParams,
+  session: ConsumedOAuthState | null,
+): OAuthCallbackError | null {
+  if (params.error === 'access_denied') return 'access_denied';
+  if (params.error) return 'provider_error';
+  if (!session) return 'invalid_state';
+  if (!params.code) return 'missing_code';
+  return null;
+}
+
+/**
+ * Hosted Edge Functions serve text/html as text/plain, so the callback never renders a page:
+ * it always redirects to the app's /oauth route, which closes the web popup or finishes the
+ * native auth session.
+ */
+export function oauthCallbackRedirect(input: {
   ok: boolean;
   provider: 'google' | 'microsoft';
-  title: string;
-  message: string;
   redirectTo: string;
-  error?: string;
+  error?: OAuthCallbackError;
 }): Response {
-  const redirect = withQuery(
+  const location = withQuery(
     input.redirectTo,
     input.ok
       ? `connected=${input.provider}`
-      : `oauth_error=${input.error ?? 'oauth_failed'}&provider=${input.provider}`,
+      : `oauth_error=${input.error ?? 'provider_error'}&provider=${input.provider}`,
   );
-
-  if (isWebPopupReturn(input.redirectTo)) {
-    let targetOrigin = '*';
-    try {
-      targetOrigin = new URL(input.redirectTo).origin;
-    } catch {
-      /* keep wildcard fallback */
-    }
-    const payload = {
-      type: 'unify-calendar-oauth',
-      ok: input.ok,
-      provider: input.provider,
-      error: input.ok ? null : (input.error ?? 'oauth_failed'),
-    };
-    const html = `<!DOCTYPE html>
-<html lang="pt-BR"><head><meta charset="utf-8"><title>${escapeHtml(input.title)}</title>
-<meta http-equiv="refresh" content="0;url=${escapeHtml(redirect)}"></head>
-<body><p>${escapeHtml(input.message)}</p>
-<p><a href="${escapeHtml(redirect)}">Continuar para o Both</a></p>
-<script>
-(function () {
-  var payload = ${JSON.stringify(payload)};
-  var fallback = ${JSON.stringify(redirect)};
-  var targetOrigin = ${JSON.stringify(targetOrigin)};
-  function notifyOpener() {
-    if (!window.opener || window.opener.closed) return false;
-    try {
-      window.opener.postMessage(payload, targetOrigin === '*' ? '*' : targetOrigin);
-      window.close();
-      return true;
-    } catch (e) {}
-    try {
-      window.opener.postMessage(payload, '*');
-      window.close();
-      return true;
-    } catch (e2) {}
-    return false;
-  }
-  if (!notifyOpener()) {
-    window.location.replace(fallback);
-  }
-})();
-</script></body></html>`;
-    return new Response(html, {
-      status: 200,
-      headers: {
-        ...corsHeaders,
-        'Content-Type': 'text/html; charset=utf-8',
-        'Cache-Control': 'no-store',
-      },
-    });
-  }
-
-  try {
-    return Response.redirect(redirect, 302);
-  } catch {
-    return new Response(null, {
-      status: 302,
-      headers: { ...corsHeaders, Location: redirect, 'Cache-Control': 'no-store' },
-    });
-  }
-}
-
-function isWebPopupReturn(url: string): boolean {
-  try {
-    const parsed = new URL(url.trim());
-    if (parsed.protocol === 'exp:' || parsed.protocol === 'exps:') return true;
-    if (
-      (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
-      (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1')
-    ) {
-      return true;
-    }
-    return false;
-  } catch {
-    return false;
-  }
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;');
+  return new Response(null, {
+    status: 302,
+    headers: { ...corsHeaders, Location: location, 'Cache-Control': 'no-store' },
+  });
 }
 
 export function assertMicrosoftClientId(clientId: string): void {
