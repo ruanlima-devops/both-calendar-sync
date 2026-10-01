@@ -6,10 +6,13 @@ import {
   calendarSecrets,
   consumeOAuthState,
   createOAuthState,
-  defaultAppRedirect,
+  defaultOAuthReturn,
+  oauthCallbackParams,
+  oauthCallbackRedirect,
+  oauthCallbackRejection,
   oauthRedirectFromBody,
-  oauthResultPage,
   readJsonBody,
+  type OAuthCallbackError,
 } from '../_shared/oauth.ts';
 import { inspectMicrosoftClientId, MicrosoftCalendarProvider } from '../_shared/providers/microsoft.ts';
 import { requireEntitlement } from '../_shared/billing/entitlement.ts';
@@ -31,17 +34,8 @@ function provider() {
   );
 }
 
-function page(ok: boolean, redirectTo: string, error?: string): Response {
-  return oauthResultPage({
-    ok,
-    provider: 'microsoft',
-    title: ok ? 'Microsoft Calendar conectado' : 'Não foi possível conectar',
-    message: ok
-      ? 'Esta janela pode ser fechada.'
-      : 'Não foi possível conectar sua conta Microsoft. Volte ao Both e tente novamente.',
-    redirectTo,
-    error,
-  });
+function page(ok: boolean, redirectTo: string, error?: OAuthCallbackError): Response {
+  return oauthCallbackRedirect({ ok, provider: 'microsoft', redirectTo, error });
 }
 
 Deno.serve((req) =>
@@ -49,24 +43,21 @@ Deno.serve((req) =>
     const url = new URL(req.url);
     const db = adminClient();
     const redirectUri = functionPublicUrl('microsoft-oauth', envOptional('MICROSOFT_REDIRECT_URI'));
-    const providerError = url.searchParams.get('error');
-    const code = url.searchParams.get('code');
-    const state = url.searchParams.get('state') ?? '';
+    const callback = oauthCallbackParams(url);
 
-    if (providerError || code) {
-      const session = await consumeOAuthState(db, state, 'MICROSOFT');
-      const fallback = session?.redirect || defaultAppRedirect();
-
-      if (providerError === 'access_denied') {
-        logSafe('[microsoft-oauth] denied', { hasSession: Boolean(session) });
-        return page(false, fallback, 'access_denied');
+    if (callback) {
+      const session = await consumeOAuthState(db, callback.state, 'MICROSOFT');
+      const fallback = session?.redirect || defaultOAuthReturn();
+      const rejection = oauthCallbackRejection(callback, session);
+      if (rejection || !session || !callback.code) {
+        logSafe('[microsoft-oauth] callback_rejected', {
+          reason: rejection,
+          providerError: callback.error,
+          hasSession: Boolean(session),
+        });
+        return page(false, fallback, rejection ?? 'invalid_state');
       }
-      if (providerError) {
-        logSafe('[microsoft-oauth] provider_error', { error: providerError, hasSession: Boolean(session) });
-        return page(false, fallback, 'provider_error');
-      }
-      if (!session) return page(false, fallback, 'invalid_state');
-      if (!code) return page(false, fallback, 'missing_code');
+      const code = callback.code;
 
       try {
         const tokens = await provider().exchangeAuthorizationCode({

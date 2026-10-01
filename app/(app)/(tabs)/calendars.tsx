@@ -85,7 +85,7 @@ export default function CalendarsScreen() {
     if (connecting) return;
     setConnecting(provider);
     try {
-      await connectCalendar(provider);
+      if ((await connectCalendar(provider)) === 'cancelled') return;
       const providerCode = provider === 'google' ? 'GOOGLE' : 'MICROSOFT';
       const { data: cons, error } = await supabase
         .from('calendar_connections')
