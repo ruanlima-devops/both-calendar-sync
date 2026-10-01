@@ -1,12 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   consumeOAuthComplete,
+  encodeClientNonce,
   isOAuthPopupReturn,
   notifyOAuthOpener,
   OAUTH_COMPLETE_STORAGE_KEY,
   OAUTH_POPUP_NAME,
   persistOAuthComplete,
+  rememberOAuthNonce,
+  takeOAuthNonce,
   withOAuthPopupMarker,
+  withoutOAuthTicket,
 } from './oauth-complete';
 
 function memoryStorage() {
@@ -46,14 +50,54 @@ describe('web OAuth popup return', () => {
     expect(notifyOAuthOpener({ ok: false, provider: 'microsoft', error: 'access_denied' })).toBe(false);
   });
 
-  it('posts the result to a live same-origin opener', () => {
+  it('posts the result to a live same-origin opener only', () => {
     const postMessage = vi.fn();
     const self = { opener: { closed: false, postMessage }, location: { origin: 'http://localhost:8081' } };
     vi.stubGlobal('window', self);
-    expect(notifyOAuthOpener({ ok: true, provider: 'microsoft', error: null })).toBe(true);
+    expect(notifyOAuthOpener({ ok: true, provider: 'microsoft', error: null, ticket: 'T' })).toBe(true);
+    expect(postMessage).toHaveBeenCalledTimes(1);
     expect(postMessage).toHaveBeenCalledWith(
-      { type: 'unify-calendar-oauth', ok: true, provider: 'microsoft', error: null },
+      { type: 'unify-calendar-oauth', ok: true, provider: 'microsoft', error: null, ticket: 'T' },
       'http://localhost:8081',
     );
+  });
+
+  it('never falls back to a wildcard origin (the message carries the completion ticket)', () => {
+    const postMessage = vi.fn((_m: unknown, origin: string) => {
+      if (origin !== '*') throw new Error('blocked');
+    });
+    vi.stubGlobal('window', { opener: { closed: false, postMessage }, location: { origin: 'http://localhost:8081' } });
+    expect(notifyOAuthOpener({ ok: true, provider: 'google', error: null, ticket: 'T' })).toBe(false);
+    expect(postMessage.mock.calls.map((c) => c[1])).toEqual(['http://localhost:8081']);
+  });
+
+  it('leaves a ticket payload for the starting window when the reader only accepts finished results', () => {
+    vi.stubGlobal('window', {});
+    vi.stubGlobal('localStorage', memoryStorage());
+    persistOAuthComplete({ ok: true, provider: 'google', error: null, ticket: 'T' });
+    expect(consumeOAuthComplete((p) => !p.ticket)).toBeNull();
+    expect(consumeOAuthComplete()).toMatchObject({ ticket: 'T' });
+  });
+
+  it('removes the completion ticket from the URL kept in history', () => {
+    expect(withoutOAuthTicket('http://localhost:8081/oauth?popup=1&oauth_ticket=abc&provider=google'))
+      .toBe('http://localhost:8081/oauth?popup=1&provider=google');
+  });
+});
+
+describe('client nonce', () => {
+  it('encodes at least 128 random bits and refuses less', () => {
+    expect(encodeClientNonce(new Uint8Array(32).fill(255))).toMatch(/^[0-9a-f]{64}$/);
+    expect(encodeClientNonce(new Uint8Array(16))).toHaveLength(32);
+    expect(() => encodeClientNonce(new Uint8Array(15))).toThrow();
+  });
+
+  it('is kept per provider in the tab storage and read only once', () => {
+    const storage = memoryStorage();
+    rememberOAuthNonce(storage, 'google', 'nonce-g');
+    rememberOAuthNonce(storage, 'microsoft', 'nonce-m');
+    expect(takeOAuthNonce(storage, 'google')).toBe('nonce-g');
+    expect(takeOAuthNonce(storage, 'google')).toBeNull();
+    expect(takeOAuthNonce(storage, 'microsoft')).toBe('nonce-m');
   });
 });

@@ -7,6 +7,8 @@ const FRIENDLY: Record<string, string> = {
   missing_code: 'A autorização não foi concluída. Tente conectar novamente.',
   provider_error: 'O provedor recusou a autorização. Tente conectar novamente.',
   provider_mismatch: 'A autorização retornou de outro provedor. Tente conectar novamente.',
+  invalid_ticket: 'A autorização expirou ou foi iniciada em outra sessão. Tente conectar novamente.',
+  invalid_client_nonce: 'Não foi possível iniciar a autorização. Atualize a página e tente novamente.',
   DISCONNECT_BLOCKED: 'Não foi possível desconectar agora. Tente novamente em instantes.',
   missing_refresh_token: 'Permissão incompleta. Reconecte e aceite todas as permissões.',
   calendar_required: 'Escolha um calendário.',
