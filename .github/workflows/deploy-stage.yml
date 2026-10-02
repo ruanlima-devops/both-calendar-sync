@@ -20,7 +20,6 @@ concurrency:
 
 env:
   STAGE_PROJECT_REF: qszggrrjhcwltnmxpxcy
-  STAGE_PAGES_PROJECT: both-stage
 
 jobs:
   resolve:
@@ -124,133 +123,59 @@ jobs:
             ! -name "_shared" \
             | sort
 
-  web:
-    name: Cloudflare Pages STAGE
-    needs: [resolve, deploy]
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    environment: staging
-    outputs:
-      origin: ${{ steps.project.outputs.origin }}
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      EXPO_PUBLIC_SUPABASE_URL: https://qszggrrjhcwltnmxpxcy.supabase.co
-      EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
-      APP_VARIANT: preview
-    steps:
-      - name: Preflight Cloudflare credentials
-        id: pre
-        run: |
-          set -euo pipefail
-          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            echo "::notice::Cloudflare Pages STAGE credentials not configured; web deploy skipped"
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          test -n "$EXPO_PUBLIC_SUPABASE_ANON_KEY"
-          echo "enabled=true" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/checkout@v6
-        if: steps.pre.outputs.enabled == 'true'
-        with:
-          ref: ${{ needs.resolve.outputs.sha }}
-          persist-credentials: false
-
-      - uses: actions/setup-node@v7
-        if: steps.pre.outputs.enabled == 'true'
-        with:
-          node-version: 24
-          cache: npm
-
-      - name: Ensure Pages project
-        id: project
-        if: steps.pre.outputs.enabled == 'true'
-        run: |
-          set -euo pipefail
-          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects"
-          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
-          status="$(curl -sS -o project.json -w '%{http_code}' "${auth[@]}" "$api/$STAGE_PAGES_PROJECT")"
-          if [ "$status" = "404" ]; then
-            curl -fsS -o project.json "${auth[@]}" -H 'Content-Type: application/json' \
-              -d "{\"name\":\"$STAGE_PAGES_PROJECT\",\"production_branch\":\"main\"}" "$api"
-          elif [ "$status" != "200" ]; then
-            echo "ERROR: Cloudflare Pages API returned $status"
-            exit 1
-          fi
-          subdomain="$(jq -r '.result.subdomain' project.json)"
-          rm -f project.json
-          if ! printf '%s' "$subdomain" | grep -Eq '^both-stage[a-z0-9-]*\.pages\.dev$'; then
-            echo "ERROR: unexpected Pages subdomain"
-            exit 1
-          fi
-          echo "origin=https://$subdomain" >> "$GITHUB_OUTPUT"
-
-      - name: Install dependencies
-        if: steps.pre.outputs.enabled == 'true'
-        run: npm ci
-
-      - name: Export web
-        if: steps.pre.outputs.enabled == 'true'
-        env:
-          EXPO_PUBLIC_APP_URL: ${{ steps.project.outputs.origin }}
-        run: |
-          set -euo pipefail
-          npx expo export -p web
-          test -f dist/index.html
-          if [ -e dist/404.html ]; then
-            echo "ERROR: dist/404.html disables the Pages SPA fallback"
-            exit 1
-          fi
-
-      - name: Deploy to Pages STAGE
-        if: steps.pre.outputs.enabled == 'true'
-        env:
-          SHA: ${{ needs.resolve.outputs.sha }}
-        run: |
-          npx --yes wrangler@4 pages deploy dist \
-            --project-name "$STAGE_PAGES_PROJECT" \
-            --branch main \
-            --commit-hash "$SHA" \
-            --commit-message "STAGE $SHA"
-          echo "Pages STAGE: ${{ steps.project.outputs.origin }} (\`$SHA\`)" >> "$GITHUB_STEP_SUMMARY"
-
   oauth-origins:
-    name: STAGE OAuth web origin
-    needs: web
-    if: needs.web.outputs.origin != ''
+    name: STAGE web origin for OAuth
+    needs: deploy
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: staging
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      ORIGIN: ${{ needs.web.outputs.origin }}
+      STAGE_WEB_ORIGIN: ${{ vars.STAGE_WEB_ORIGIN }}
     steps:
+      - name: Validate STAGE web origin
+        id: origin
+        run: |
+          set -euo pipefail
+          if [ -z "$STAGE_WEB_ORIGIN" ]; then
+            echo "::notice::STAGE_WEB_ORIGIN not configured; OAuth web origin left unchanged"
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! printf '%s' "$STAGE_WEB_ORIGIN" | grep -Eq '^https://[a-z0-9.-]+$'; then
+            echo "ERROR: STAGE_WEB_ORIGIN must be an https origin without path"
+            exit 1
+          fi
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+
       - uses: supabase/setup-cli@v1
+        if: steps.origin.outputs.enabled == 'true'
         with:
           version: 2.115.0
 
-      - name: Allow Pages STAGE as Edge Function OAuth redirect
+      - name: Allow STAGE web origin as Edge Function OAuth redirect
+        if: steps.origin.outputs.enabled == 'true'
         run: |
           set -euo pipefail
-          want="$(printf '%s' "$ORIGIN" | sha256sum | cut -d' ' -f1)"
+          want="$(printf '%s' "$STAGE_WEB_ORIGIN" | sha256sum | cut -d' ' -f1)"
           have="$(supabase secrets list --project-ref "$STAGE_PROJECT_REF" -o json | jq -r '.[] | select(.name == "APP_REDIRECT_ALLOWLIST") | .value')"
           if [ -z "$have" ]; then
-            supabase secrets set --project-ref "$STAGE_PROJECT_REF" "APP_REDIRECT_ALLOWLIST=$ORIGIN"
-            echo "APP_REDIRECT_ALLOWLIST set to $ORIGIN"
+            supabase secrets set --project-ref "$STAGE_PROJECT_REF" "APP_REDIRECT_ALLOWLIST=$STAGE_WEB_ORIGIN"
+            echo "APP_REDIRECT_ALLOWLIST set to $STAGE_WEB_ORIGIN"
           elif [ "$have" = "$want" ]; then
-            echo "APP_REDIRECT_ALLOWLIST already $ORIGIN"
+            echo "APP_REDIRECT_ALLOWLIST already $STAGE_WEB_ORIGIN"
           else
             echo "ERROR: APP_REDIRECT_ALLOWLIST holds another value; refusing to overwrite"
             exit 1
           fi
 
-      - name: Allow Pages STAGE as Supabase Auth redirect
+      - name: Allow STAGE web origin as Supabase Auth redirect
+        if: steps.origin.outputs.enabled == 'true'
         run: |
           set -euo pipefail
           api="https://api.supabase.com/v1/projects/$STAGE_PROJECT_REF/config/auth"
           current="$(curl -fsS -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" "$api" | jq -r '.uri_allow_list // ""')"
-          entry="$ORIGIN/**"
+          entry="$STAGE_WEB_ORIGIN/**"
           if printf '%s' "$current" | tr ',' '\n' | grep -Fxq "$entry"; then
             echo "Auth redirect already allowed: $entry"
             exit 0
