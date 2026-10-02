@@ -1,5 +1,7 @@
 /** Minimal iCalendar (RFC 5545) parse/build for Unify ↔ iCloud CalDAV. */
 
+import { optionalUuidOrUndefined } from '../../sync/metadata.ts';
+
 export type IcsEvent = {
   uid: string;
   summary: string;
@@ -298,7 +300,8 @@ export function buildVEvent(input: {
   if (input.location) lines.push(`LOCATION:${escapeIcs(input.location)}`);
   lines.push(`TRANSP:${input.transp ?? 'OPAQUE'}`);
   lines.push('STATUS:CONFIRMED');
-  if (input.syncGroupId) lines.push(`X-UNIFY-CORRELATION-ID:${escapeIcs(input.syncGroupId)}`);
+  const syncGroupId = optionalUuidOrUndefined(input.syncGroupId);
+  if (syncGroupId) lines.push(`X-UNIFY-CORRELATION-ID:${escapeIcs(syncGroupId)}`);
   if (input.role) lines.push(`X-UNIFY-MANAGED:${escapeIcs(input.role)}`);
   for (const a of input.attendees ?? []) {
     const cn = a.displayName ? `;CN=${escapeIcs(a.displayName)}` : '';

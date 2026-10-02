@@ -7,6 +7,7 @@ import type {
   SyncPage,
   WatchInfo,
 } from '../../sync/types.ts';
+import { optionalUuidOrUndefined } from '../../sync/metadata.ts';
 import {
   authFromBasicToken,
   buildEventIcs,
@@ -53,7 +54,7 @@ function toNormalized(
     updatedAt: vevent.lastModified,
     recurrenceRule: vevent.rrule,
     recurringEventId: vevent.recurrenceId,
-    unifySyncGroupId: group || undefined,
+    unifySyncGroupId: optionalUuidOrUndefined(group),
     unifyEventRole: role,
     busyTransparency: vevent.transp === 'TRANSPARENT' ? 'transparent' : 'opaque',
   };

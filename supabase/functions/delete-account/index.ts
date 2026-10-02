@@ -1,32 +1,21 @@
 import { adminClient, handle, json, userFromRequest } from '../_shared/function.ts';
-import { logSafe } from '../_shared/http.ts';
+import { AccountDeleteBlockedError } from '../_shared/account/oauth-revoke.ts';
+import { deleteUserAccount } from '../_shared/account/delete-user.ts';
+import { env } from '../_shared/http.ts';
 
 Deno.serve((req) =>
   handle(req, async () => {
+    if (req.method !== 'POST') return json({ error: 'METHOD_NOT_ALLOWED' }, 405);
     const { userId } = await userFromRequest(req);
     const db = adminClient();
-
-    // Calendar connections cascade to calendars/events via FK when present;
-    // delete connections explicitly so encrypted secrets go away first.
-    const { data: connections } = await db
-      .from('calendar_connections')
-      .select('id')
-      .eq('user_id', userId);
-    for (const conn of connections ?? []) {
-      await db.from('calendar_secrets').delete().eq('connection_id', conn.id);
-      await db.from('calendar_connections').delete().eq('id', conn.id);
+    try {
+      const result = await deleteUserAccount(db, userId, env('TOKEN_ENCRYPTION_KEY'));
+      return json({ ok: true, connectionsCleaned: result.connectionsCleaned });
+    } catch (err) {
+      if (err instanceof AccountDeleteBlockedError) {
+        return json({ error: 'ACCOUNT_DELETE_BLOCKED', code: err.message }, 503);
+      }
+      throw err;
     }
-
-    await db.from('notifications').delete().eq('user_id', userId);
-    // Keep billing_events anonymized for audit; clear PII link
-    await db.from('billing_events').update({ user_id: null }).eq('user_id', userId);
-    await db.from('user_subscriptions').delete().eq('user_id', userId);
-    await db.from('profiles').delete().eq('id', userId);
-
-    const { error } = await db.auth.admin.deleteUser(userId);
-    if (error) throw new Error(error.message);
-
-    logSafe('account_deleted', { userId });
-    return json({ ok: true });
   }),
 );

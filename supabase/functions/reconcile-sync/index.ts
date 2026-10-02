@@ -23,12 +23,14 @@ Deno.serve((req) =>
     for (const job of stuck ?? []) void processSyncJob(db, job.id);
     const { data: calendars } = await db
       .from('connected_calendars')
-      .select('id, connection_id, user_id, calendar_connections!inner(provider)')
+      .select('id, connection_id, user_id, calendar_connections!inner(provider, status)')
       .eq('enabled', true);
     for (const cal of calendars ?? []) {
-      const provider = (cal.calendar_connections as { provider?: string } | null)?.provider;
+      const connection = cal.calendar_connections as { provider?: string; status?: string } | null;
+      const provider = connection?.provider;
       // iCloud uses adaptive icloud-poll; keep hourly reconcile for push providers only.
       if (provider === 'ICLOUD') continue;
+      if (connection?.status === 'AUTH_REQUIRED') continue;
       const entitlement = await getEntitlement(db, cal.user_id as string);
       if (!entitlement.hasAccess) continue;
       const jobId = await enqueueSync(db, {

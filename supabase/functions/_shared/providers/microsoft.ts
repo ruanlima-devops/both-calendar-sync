@@ -1,6 +1,9 @@
 import { mapOAuthError } from '../crypto/tokens.ts';
 import { microsoftDateToNormalized } from '../sync/dates.ts';
 import { isDeltaLinkInvalid } from '../sync/engine.ts';
+import { optionalUuidOrUndefined } from '../sync/metadata.ts';
+import { attachRecurringKind } from '../sync/recurring.ts';
+import { providerFetch, type ProviderOperation, type RetrySafety } from './http-retry.ts';
 import {
   MS_PROP_GUID,
   UNIFY_PROP_GROUP,
@@ -40,7 +43,8 @@ export function parseMicrosoftEvent(raw: Record<string, unknown>, fallbackTz: st
   const removed = Boolean(raw['@removed']) ||
     (raw['@removed'] as { reason?: string } | undefined)?.reason === 'deleted';
   const status: NormalizedEvent['status'] = removed || raw.isCancelled ? 'cancelled' : 'confirmed';
-  return {
+  const providerEventType = raw.type ? String(raw.type) : undefined;
+  return attachRecurringKind({
     providerEventId: String(raw.id ?? ''),
     title: String(raw.subject ?? '(sem título)'),
     description: raw.bodyPreview ? String(raw.bodyPreview) : undefined,
@@ -50,11 +54,13 @@ export function parseMicrosoftEvent(raw: Record<string, unknown>, fallbackTz: st
     etag: raw['@odata.etag'] ? String(raw['@odata.etag']) : undefined,
     updatedAt: raw.lastModifiedDateTime ? String(raw.lastModifiedDateTime) : undefined,
     recurrenceRule: raw.recurrence ? JSON.stringify(raw.recurrence) : undefined,
-    unifySyncGroupId: group,
+    recurringEventId: raw.seriesMasterId ? String(raw.seriesMasterId) : undefined,
+    providerEventType,
+    unifySyncGroupId: optionalUuidOrUndefined(group),
     unifyEventRole: role,
     isDeleted: removed || status === 'cancelled',
     busyTransparency: raw.showAs ? String(raw.showAs) : 'busy',
-  };
+  });
 }
 
 export class MicrosoftCalendarProvider implements CalendarProvider {
@@ -94,7 +100,10 @@ export class MicrosoftCalendarProvider implements CalendarProvider {
       grant_type: 'authorization_code',
       scope: SCOPES,
     });
-    const me = await graphFetch(body.access_token, '/me?$select=id,mail,userPrincipalName');
+    const me = await graphFetch(body.access_token, '/me?$select=id,mail,userPrincipalName', {
+      operation: 'other',
+      safety: 'read',
+    });
     return {
       accessToken: body.access_token,
       refreshToken: body.refresh_token,
@@ -120,7 +129,10 @@ export class MicrosoftCalendarProvider implements CalendarProvider {
   }
 
   async listCalendars(accessToken: string): Promise<CalendarInfo[]> {
-    const res = await graphFetch(accessToken, '/me/calendars');
+    const res = await graphFetch(accessToken, '/me/calendars', {
+      operation: 'list_calendars',
+      safety: 'read',
+    });
     const items = (res.value ?? []) as Array<Record<string, unknown>>;
     return items.map((calendar) => ({
       providerCalendarId: String(calendar.id),
@@ -165,9 +177,12 @@ export class MicrosoftCalendarProvider implements CalendarProvider {
   }
 
   async createEvent(accessToken: string, calendarId: string, input: CreateEventInput) {
+    // Graph calendar create has no supported idempotency key in this codebase → only rate-limit retries.
     const res = await graphFetch(accessToken, `/me/calendars/${encodeURIComponent(calendarId)}/events`, {
       method: 'POST',
       body: JSON.stringify(toMicrosoftBody(input)),
+      operation: 'create_event',
+      safety: 'create',
     });
     return {
       providerEventId: String(res.id),
@@ -184,22 +199,21 @@ export class MicrosoftCalendarProvider implements CalendarProvider {
     await graphFetch(
       accessToken,
       `/me/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(providerEventId)}`,
-      { method: 'PATCH', body: JSON.stringify(toMicrosoftBody(input as CreateEventInput)) },
+      {
+        method: 'PATCH',
+        body: JSON.stringify(toMicrosoftBody(input as CreateEventInput)),
+        operation: 'update_event',
+        safety: 'idempotent_write',
+      },
     );
   }
 
   async deleteEvent(accessToken: string, calendarId: string, providerEventId: string) {
-    try {
-      await graphFetch(
-        accessToken,
-        `/me/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(providerEventId)}`,
-        { method: 'DELETE' },
-      );
-    } catch (err) {
-      const status = (err as { httpStatus?: number }).httpStatus;
-      if (status === 404 || status === 410) return;
-      throw err;
-    }
+    await graphFetch(
+      accessToken,
+      `/me/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(providerEventId)}`,
+      { method: 'DELETE', operation: 'delete_event', safety: 'idempotent_write', notFoundOk: true },
+    );
   }
 
   async createWebhookSubscription(
@@ -220,6 +234,8 @@ export class MicrosoftCalendarProvider implements CalendarProvider {
         expirationDateTime: expiresAt,
         clientState: state,
       }),
+      operation: 'subscription_create',
+      safety: 'subscription_create',
     });
     return {
       externalSubscriptionId: String(res.id),
@@ -237,18 +253,26 @@ export class MicrosoftCalendarProvider implements CalendarProvider {
     const res = await graphFetch(accessToken, `/subscriptions/${subscription.externalSubscriptionId}`, {
       method: 'PATCH',
       body: JSON.stringify({ expirationDateTime: expiresAt }),
+      operation: 'subscription_renew',
+      safety: 'idempotent_write',
     });
     return { ...subscription, expiresAt: String(res.expirationDateTime ?? expiresAt) };
   }
 
   async deleteWebhookSubscription(accessToken: string, subscription: WatchInfo): Promise<void> {
-    await graphFetch(accessToken, `/subscriptions/${subscription.externalSubscriptionId}`, { method: 'DELETE' });
+    await graphFetch(accessToken, `/subscriptions/${subscription.externalSubscriptionId}`, {
+      method: 'DELETE',
+      operation: 'subscription_delete',
+      safety: 'idempotent_write',
+      notFoundOk: true,
+    });
   }
 
   private async readDelta(accessToken: string, pathOrUrl: string): Promise<SyncPage> {
-    const res = pathOrUrl.startsWith('http')
-      ? await graphFetch(accessToken, pathOrUrl)
-      : await graphFetch(accessToken, pathOrUrl);
+    const res = await graphFetch(accessToken, pathOrUrl, {
+      operation: 'list_events',
+      safety: 'read',
+    });
     const items = (res.value ?? []) as Array<Record<string, unknown>>;
     return {
       events: items
@@ -277,7 +301,7 @@ async function requestToken(tenant: string, params: Record<string, string>): Pro
   return body as Record<string, string>;
 }
 
-function toMicrosoftBody(input: CreateEventInput): Record<string, unknown> {
+export function toMicrosoftBody(input: CreateEventInput): Record<string, unknown> {
   const startDate = input.startAt.slice(0, 10);
   let endDate = input.endAt.slice(0, 10);
   // Graph all-day end is exclusive.
@@ -285,6 +309,14 @@ function toMicrosoftBody(input: CreateEventInput): Record<string, unknown> {
     const next = new Date(`${startDate}T12:00:00Z`);
     next.setUTCDate(next.getUTCDate() + 1);
     endDate = next.toISOString().slice(0, 10);
+  }
+  const extended: Array<{ id: string; value: string }> = [
+    { id: ROLE_PROP, value: input.role },
+  ];
+  const group = optionalUuidOrUndefined(input.syncGroupId);
+  if (group) extended.unshift({ id: GROUP_PROP, value: group });
+  if (input.clientEventId) {
+    extended.push({ id: `String {${MS_PROP_GUID}} Name unifyClientEventId`, value: input.clientEventId });
   }
   return {
     subject: input.title,
@@ -305,13 +337,7 @@ function toMicrosoftBody(input: CreateEventInput): Record<string, unknown> {
           type: 'required',
         }))
       : undefined,
-    singleValueExtendedProperties: [
-      { id: GROUP_PROP, value: input.syncGroupId ?? '' },
-      { id: ROLE_PROP, value: input.role },
-      ...(input.clientEventId
-        ? [{ id: `String {${MS_PROP_GUID}} Name unifyClientEventId`, value: input.clientEventId }]
-        : []),
-    ],
+    singleValueExtendedProperties: extended,
   };
 }
 
@@ -333,23 +359,34 @@ function hexFromMsColor(hex: unknown, named: unknown): string {
   return map[String(named)] ?? '#0f6cbd';
 }
 
-async function graphFetch(accessToken: string, pathOrUrl: string, init: RequestInit = {}): Promise<Record<string, unknown>> {
+async function graphFetch(
+  accessToken: string,
+  pathOrUrl: string,
+  init: RequestInit & {
+    operation: ProviderOperation;
+    safety: RetrySafety;
+    notFoundOk?: boolean;
+    allowEmpty?: boolean;
+  },
+): Promise<Record<string, unknown>> {
+  const { operation, safety, notFoundOk, allowEmpty, ...rest } = init;
   const url = pathOrUrl.startsWith('http') ? pathOrUrl : `${GRAPH}${pathOrUrl}`;
-  const res = await fetch(url, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-      Prefer: 'IdType="ImmutableId"',
-      ...(init.headers ?? {}),
+  const result = await providerFetch({
+    provider: 'MICROSOFT',
+    operation,
+    safety,
+    url,
+    notFoundOk,
+    allowEmpty,
+    init: {
+      ...rest,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        Prefer: 'IdType="ImmutableId"',
+        ...(rest.headers ?? {}),
+      },
     },
   });
-  if (res.status === 204) return {};
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const err = new Error((body as { error?: { message?: string } }).error?.message ?? `microsoft_http_${res.status}`);
-    (err as { httpStatus?: number }).httpStatus = res.status;
-    throw err;
-  }
-  return body as Record<string, unknown>;
+  return result.body;
 }

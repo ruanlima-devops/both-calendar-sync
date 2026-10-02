@@ -5,6 +5,12 @@ import {
   createMirrorsForOrigin,
   removeMirrorsForOrigin,
 } from '../_shared/sync/engine.ts';
+import {
+  classifyRecurringKind,
+  isUnsupportedRecurringMutation,
+  UNSUPPORTED_RECURRING_OPERATION,
+  logRecurringSkipped,
+} from '../_shared/sync/recurring.ts';
 import { PostgresStore } from '../_shared/sync/postgres-store.ts';
 import { getValidAccessToken, loadSyncContext, providerFor, ProviderMirrorActor } from '../_shared/sync/runtime.ts';
 
@@ -23,6 +29,20 @@ Deno.serve((req) =>
     }
 
     const { ctx, calendar } = await loadSyncContext(db, existing.connectedCalendarId);
+    const eventKind = classifyRecurringKind({
+      recurrenceRule: existing.recurrenceRule,
+      recurringEventId: existing.recurringEventId,
+    });
+    if (isUnsupportedRecurringMutation(eventKind)) {
+      logRecurringSkipped({
+        provider: ctx.provider,
+        operation: 'update_event',
+        eventKind,
+        reason: 'unsupported_recurring_mutation',
+      });
+      return json({ error: UNSUPPORTED_RECURRING_OPERATION, eventKind }, 422);
+    }
+
     const accessRole = String(calendar.access_role ?? '').toLowerCase();
     if (accessRole !== 'owner' && accessRole !== 'writer' && accessRole !== 'editor') {
       throw new Error('CALENDAR_READ_ONLY');
@@ -68,6 +88,8 @@ Deno.serve((req) =>
         status: 'confirmed',
         unifyEventRole: 'ORIGIN',
         unifySyncGroupId: existing.syncGroupId ?? undefined,
+        recurrenceRule: existing.recurrenceRule ?? undefined,
+        recurringEventId: existing.recurringEventId ?? undefined,
       },
       store,
       actor,

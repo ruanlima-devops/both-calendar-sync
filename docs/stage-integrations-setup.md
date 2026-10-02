@@ -296,6 +296,24 @@ Legacy: no
 
 ---
 
+## Account deletion (Edge Function `delete-account`)
+
+Server-side only (JWT → `userFromRequest`). Never pass `userId` from the client body.
+
+Cleanup order:
+
+1. Fail open sync jobs (`account_deleted`)
+2. Stop Google watches / Microsoft Graph subscriptions (404/410 = continue)
+3. Best-effort Google OAuth revoke (Microsoft revoke deferred to M3-003)
+4. Delete scheduling links / oauth states (avoids `ON DELETE RESTRICT`)
+5. Delete calendar connections (cascades calendars, secrets, events, webhooks)
+6. Anonymize `billing_events.user_id`, delete subscription/profile
+7. `auth.admin.deleteUser`
+
+Client: Settings danger zone + `/delete-account` typed confirmation → `signOut({ scope: 'local' })`.
+
+---
+
 ## Intentionally pending
 
 - Apple Auth

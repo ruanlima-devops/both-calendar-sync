@@ -11,6 +11,13 @@ import {
   type SyncStore,
   type TargetCalendar,
 } from './types.ts';
+import { optionalUuidOrNull } from './metadata.ts';
+import { buildMirrorAbandonmentKey, isProviderGoneError } from './abandonment.ts';
+import {
+  attachRecurringKind,
+  canMirrorRecurringKind,
+  logRecurringSkipped,
+} from './recurring.ts';
 import {
   mirrorPayloadFromRule,
   shouldPropagateEvent,
@@ -71,7 +78,7 @@ function resolveFirewallTargets(
 
 export async function applyIncomingEvent(
   ctx: SyncContext,
-  incoming: NormalizedEvent,
+  incomingRaw: NormalizedEvent,
   store: SyncStore,
   actor: MirrorActor,
 ): Promise<ApplyResult> {
@@ -84,6 +91,10 @@ export async function applyIncomingEvent(
     errors: [],
   };
 
+  const incoming = attachRecurringKind(incomingRaw);
+  const kind = incoming.recurringKind;
+
+  // Lookup is ALWAYS by this providerEventId — never by recurringEventId/seriesMasterId.
   const existing = await store.findByProviderEventId(ctx.connectedCalendarId, incoming.providerEventId);
   const incomingDeleted = incoming.isDeleted || incoming.status === 'cancelled';
 
@@ -92,6 +103,11 @@ export async function applyIncomingEvent(
   }
 
   if (incomingDeleted) {
+    // Cancelled occurrence/exception must only affect THIS event's mirrors, never the master series.
+    if ((kind === 'occurrence' || kind === 'exception') && !existing) {
+      result.skipped = 'unknown_deleted_occurrence';
+      return result;
+    }
     return applyOriginDelete(existing, store, actor, result);
   }
 
@@ -107,7 +123,7 @@ export async function applyIncomingEvent(
     connectedCalendarId: ctx.connectedCalendarId,
     providerEventId: incoming.providerEventId,
     eventRole: role,
-    syncGroupId: existing?.syncGroupId ?? incoming.unifySyncGroupId ?? null,
+    syncGroupId: existing?.syncGroupId ?? optionalUuidOrNull(incoming.unifySyncGroupId),
     title: incoming.title,
     description: incoming.description,
     location: incoming.location,
@@ -122,6 +138,17 @@ export async function applyIncomingEvent(
     recurringEventId: incoming.recurringEventId,
   });
   result.stored = stored;
+
+  if (!canMirrorRecurringKind(kind)) {
+    logRecurringSkipped({
+      provider: ctx.provider,
+      operation: 'create_or_propagate_mirrors',
+      eventKind: kind,
+      reason: 'unsupported_series_master_mirror',
+    });
+    result.skipped = 'unsupported_recurring_operation';
+    return result;
+  }
 
   if (stored.syncGroupId) {
     if (existing && timesChanged(existing, incoming)) {
@@ -251,6 +278,12 @@ async function propagateOriginTimes(
       });
       result.updatedMirrors += 1;
     } catch (err) {
+      // Destination mirror deleted outside Both — record abandonment; do not recreate.
+      if (isProviderGoneError(err)) {
+        await store.markAbandoned(mirror.id);
+        result.skipped = result.skipped ?? 'mirror_deleted_externally';
+        continue;
+      }
       result.errors.push(`mirror_update_failed:${mirror.id}:${String(err)}`);
     }
   }
@@ -282,7 +315,11 @@ export async function createMirrorsForOrigin(
   result.stored = { ...origin, eventRole: 'ORIGIN', syncGroupId: groupId };
 
   for (const { target, rule } of pairs) {
-    const originKey = `${origin.connectedCalendarId}:${origin.providerEventId}:${target.id}`;
+    const originKey = buildMirrorAbandonmentKey(
+      origin.connectedCalendarId,
+      origin.providerEventId,
+      target.id,
+    );
     if (await store.wasMirrorAbandoned(target.id, originKey)) {
       result.skipped = result.skipped ?? 'abandoned_mirror_not_recreated';
       continue;

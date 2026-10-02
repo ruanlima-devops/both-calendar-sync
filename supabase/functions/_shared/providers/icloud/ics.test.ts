@@ -13,7 +13,7 @@ SUMMARY:Lunch
 TRANSP:OPAQUE
 STATUS:CONFIRMED
 X-UNIFY-MANAGED:MIRROR
-X-UNIFY-CORRELATION-ID:group-1
+X-UNIFY-CORRELATION-ID:f1940169-1111-4111-8111-000000000001
 END:VEVENT
 END:VCALENDAR`;
     const events = parseVEvents(ics);
@@ -22,6 +22,9 @@ END:VCALENDAR`;
     expect(events[0]!.summary).toBe('Lunch');
     expect(events[0]!.startAt).toBe('2026-08-24T14:00:00.000Z');
     expect(events[0]!.xProps['X-UNIFY-MANAGED']).toBe('MIRROR');
+    expect(events[0]!.xProps['X-UNIFY-CORRELATION-ID']).toBe(
+      'f1940169-1111-4111-8111-000000000001',
+    );
   });
 
   it('parses all-day without shifting date', () => {
@@ -47,13 +50,28 @@ END:VCALENDAR`;
       timezone: 'UTC',
       allDay: false,
       role: 'MIRROR',
-      syncGroupId: 'g1',
+      syncGroupId: 'f1940169-1111-4111-8111-000000000001',
       transp: 'OPAQUE',
     });
     expect(ics).toContain('SUMMARY:Horário reservado');
     expect(ics).toContain('TRANSP:OPAQUE');
     expect(ics).toContain('X-UNIFY-MANAGED:MIRROR');
-    expect(ics).toContain('X-UNIFY-CORRELATION-ID:g1');
+    expect(ics).toContain('X-UNIFY-CORRELATION-ID:f1940169-1111-4111-8111-000000000001');
+  });
+
+  it('omits empty sync group correlation id', () => {
+    const ics = buildVEvent({
+      uid: 'u2',
+      title: 't',
+      startAt: '2026-08-24T14:00:00.000Z',
+      endAt: '2026-08-24T15:00:00.000Z',
+      timezone: 'UTC',
+      allDay: false,
+      role: 'EXTERNAL',
+      syncGroupId: '',
+      transp: 'OPAQUE',
+    });
+    expect(ics).not.toContain('X-UNIFY-CORRELATION-ID');
   });
 });
 

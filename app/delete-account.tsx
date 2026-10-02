@@ -6,8 +6,12 @@ import { Input } from '@/components/ui/Input';
 import { Screen } from '@/components/ui/Screen';
 import { Typography } from '@/components/ui/Typography';
 import { useSession } from '@/context/session';
+import { deleteAccountAndSignOut } from '@/lib/account/client';
+import {
+  DELETE_ACCOUNT_CONFIRM_WORD,
+  isDeleteAccountConfirmPhrase,
+} from '@/lib/account/delete-account';
 import { friendlyError } from '@/lib/errors';
-import { invokeFunction, supabase } from '@/lib/supabase';
 import { space } from '@/lib/theme';
 
 export default function DeleteAccountPage() {
@@ -19,15 +23,15 @@ export default function DeleteAccountPage() {
   const [error, setError] = useState<string | null>(null);
 
   async function submit() {
-    if (confirm.trim().toUpperCase() !== 'EXCLUIR') {
-      setError('Digite EXCLUIR para confirmar.');
+    if (busy) return;
+    if (!isDeleteAccountConfirmPhrase(confirm)) {
+      setError(`Digite ${DELETE_ACCOUNT_CONFIRM_WORD} para confirmar.`);
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      await invokeFunction('delete-account');
-      await supabase.auth.signOut();
+      await deleteAccountAndSignOut();
       setDone(true);
     } catch (err) {
       setError(friendlyError(err, 'Não foi possível excluir a conta.'));
@@ -45,11 +49,14 @@ export default function DeleteAccountPage() {
       </Typography>
       <Typography variant="body" muted>
         Tokens de calendário são removidos do backend. Registros mínimos de cobrança podem ser
-        retidos quando a lei exigir.
+        retidos quando a lei exigir. A operação não pode ser desfeita.
       </Typography>
 
       {done ? (
-        <Typography variant="sectionTitle">Conta excluída.</Typography>
+        <View style={{ gap: space.sm }}>
+          <Typography variant="sectionTitle">Conta excluída.</Typography>
+          <Button label="Ir para login" onPress={() => router.replace('/(auth)/login')} />
+        </View>
       ) : status === 'loading' ? (
         <Typography variant="body" muted>
           Carregando…
@@ -63,10 +70,11 @@ export default function DeleteAccountPage() {
         <View style={{ gap: space.md }}>
           <Typography variant="body">Conta: {session.user.email ?? session.user.id}</Typography>
           <Input
-            label="Digite EXCLUIR para confirmar"
+            label={`Digite ${DELETE_ACCOUNT_CONFIRM_WORD} para confirmar`}
             value={confirm}
             onChangeText={setConfirm}
             autoCapitalize="characters"
+            editable={!busy}
           />
           {error ? (
             <Typography variant="caption" style={{ color: theme.danger }}>
@@ -77,6 +85,7 @@ export default function DeleteAccountPage() {
             label={busy ? 'Excluindo…' : 'Excluir minha conta permanentemente'}
             variant="danger"
             loading={busy}
+            disabled={busy}
             onPress={() => void submit()}
           />
         </View>

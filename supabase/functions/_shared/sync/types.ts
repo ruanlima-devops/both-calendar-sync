@@ -17,6 +17,10 @@ export interface NormalizedEvent {
   updatedAt?: string;
   recurrenceRule?: string;
   recurringEventId?: string;
+  /** Microsoft Graph `type` when present (seriesMaster / occurrence / exception / singleInstance). */
+  providerEventType?: string;
+  /** Derived safety classification; may be filled by parsers or classifyRecurringKind. */
+  recurringKind?: import('./recurring.ts').RecurringKind;
   unifySyncGroupId?: string;
   unifyEventRole?: EventRole;
   isDeleted?: boolean;
@@ -80,6 +84,8 @@ export interface StoredEvent {
   allDay: boolean;
   location?: string | null;
   status: EventStatus;
+  recurrenceRule?: string | null;
+  recurringEventId?: string | null;
 }
 
 export interface TargetCalendar {

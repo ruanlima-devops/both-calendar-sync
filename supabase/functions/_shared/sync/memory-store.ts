@@ -1,3 +1,4 @@
+import { buildMirrorAbandonmentKey, parseMirrorAbandonmentKey } from './abandonment.ts';
 import type { EventRole, EventStatus, StoredEvent, SyncStore } from './types.ts';
 
 export class MemoryStore implements SyncStore {
@@ -37,6 +38,8 @@ export class MemoryStore implements SyncStore {
     location?: string;
     status: EventStatus;
     firewallRuleId?: string | null;
+    recurrenceRule?: string;
+    recurringEventId?: string;
   }): Promise<StoredEvent> {
     const k = this.key(input.connectedCalendarId, input.providerEventId);
     const prev = this.events.get(k);
@@ -58,6 +61,8 @@ export class MemoryStore implements SyncStore {
       allDay: input.allDay,
       location: input.location ?? prev?.location ?? null,
       status: input.status,
+      recurrenceRule: input.recurrenceRule ?? prev?.recurrenceRule ?? null,
+      recurringEventId: input.recurringEventId ?? prev?.recurringEventId ?? null,
     };
     this.events.set(k, stored);
     return stored;
@@ -94,7 +99,30 @@ export class MemoryStore implements SyncStore {
   }
 
   async wasMirrorAbandoned(calendarId: string, originKey: string): Promise<boolean> {
-    return this.abandoned.has(`${calendarId}::${originKey}`);
+    if (this.abandoned.has(`${calendarId}::${originKey}`)) return true;
+
+    const parsed = parseMirrorAbandonmentKey(originKey);
+    if (!parsed || parsed.targetCalendarId !== calendarId) return false;
+
+    for (const mirror of this.events.values()) {
+      if (
+        mirror.eventRole !== 'MIRROR' ||
+        mirror.status !== 'abandoned' ||
+        mirror.connectedCalendarId !== calendarId ||
+        !mirror.syncGroupId
+      ) {
+        continue;
+      }
+      const origin = [...this.events.values()].find(
+        (e) =>
+          e.syncGroupId === mirror.syncGroupId &&
+          e.eventRole === 'ORIGIN' &&
+          e.connectedCalendarId === parsed.originCalendarId &&
+          e.providerEventId === parsed.originProviderEventId,
+      );
+      if (origin) return true;
+    }
+    return false;
   }
 
   async markAbandoned(id: string): Promise<void> {
@@ -105,7 +133,11 @@ export class MemoryStore implements SyncStore {
     if (event.syncGroupId) {
       const origin = (await this.listGroupEvents(event.syncGroupId)).find((e) => e.eventRole === 'ORIGIN');
       if (origin) {
-        const originKey = `${origin.connectedCalendarId}:${origin.providerEventId}:${event.connectedCalendarId}`;
+        const originKey = buildMirrorAbandonmentKey(
+          origin.connectedCalendarId,
+          origin.providerEventId,
+          event.connectedCalendarId,
+        );
         this.abandoned.add(`${event.connectedCalendarId}::${originKey}`);
       }
     }
@@ -118,6 +150,8 @@ export class RecordingActor {
   deletes: string[] = [];
   failCreates = false;
   failForCalendarIds = new Set<string>();
+  /** When set, updateEvent throws with this httpStatus (e.g. 404 = mirror gone). */
+  updateHttpStatus: number | null = null;
   private n = 0;
 
   async createEvent(target: { id: string; providerCalendarId: string }, input: { title: string; syncGroupId?: string }) {
@@ -128,6 +162,11 @@ export class RecordingActor {
   }
 
   async updateEvent(stored: { providerEventId: string }, input: { startAt: string }) {
+    if (this.updateHttpStatus != null) {
+      throw Object.assign(new Error(`provider_update_${this.updateHttpStatus}`), {
+        httpStatus: this.updateHttpStatus,
+      });
+    }
     this.updates.push({ providerEventId: stored.providerEventId, startAt: input.startAt });
   }
 
