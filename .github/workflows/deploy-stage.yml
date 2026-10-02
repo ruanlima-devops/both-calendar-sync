@@ -5,6 +5,11 @@ on:
     branches:
       - develop
   workflow_dispatch:
+    inputs:
+      sha:
+        description: Full 40-char commit SHA reachable from the selected branch (empty = branch HEAD)
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -13,10 +18,43 @@ concurrency:
   group: both-stage-deployment
   cancel-in-progress: false
 
+env:
+  STAGE_PROJECT_REF: qszggrrjhcwltnmxpxcy
+
 jobs:
+  resolve:
+    name: Resolve STAGE commit
+    if: github.ref == 'refs/heads/develop' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.sha.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve and verify commit
+        id: sha
+        env:
+          INPUT_SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          sha="${INPUT_SHA:-$GITHUB_SHA}"
+          if ! printf '%s' "$sha" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "ERROR: sha must be a full 40-char commit id"
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$sha" "$GITHUB_SHA"; then
+            echo "ERROR: $sha is not reachable from $GITHUB_REF"
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "STAGE deploy of \`$sha\` from \`$GITHUB_REF\` ($GITHUB_EVENT_NAME by $GITHUB_ACTOR)" >> "$GITHUB_STEP_SUMMARY"
+
   deploy:
     name: Supabase STAGE
-    if: github.ref == 'refs/heads/develop'
+    needs: resolve
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: staging
@@ -27,6 +65,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
+          ref: ${{ needs.resolve.outputs.sha }}
           persist-credentials: false
 
       - uses: supabase/setup-cli@v1
@@ -39,7 +78,7 @@ jobs:
           test -n "$SUPABASE_ACCESS_TOKEN"
           test -n "$SUPABASE_DB_PASSWORD"
           test -n "$SUPABASE_PROJECT_REF"
-          if [ "$SUPABASE_PROJECT_REF" != "qszggrrjhcwltnmxpxcy" ]; then
+          if [ "$SUPABASE_PROJECT_REF" != "$STAGE_PROJECT_REF" ]; then
             echo "ERROR: unexpected STAGE project ref"
             exit 1
           fi
@@ -83,3 +122,66 @@ jobs:
             -type d \
             ! -name "_shared" \
             | sort
+
+  oauth-origins:
+    name: STAGE web origin for OAuth
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      STAGE_WEB_ORIGIN: ${{ vars.STAGE_WEB_ORIGIN }}
+    steps:
+      - name: Validate STAGE web origin
+        id: origin
+        run: |
+          set -euo pipefail
+          if [ -z "$STAGE_WEB_ORIGIN" ]; then
+            echo "::notice::STAGE_WEB_ORIGIN not configured; OAuth web origin left unchanged"
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! printf '%s' "$STAGE_WEB_ORIGIN" | grep -Eq '^https://[a-z0-9.-]+$'; then
+            echo "ERROR: STAGE_WEB_ORIGIN must be an https origin without path"
+            exit 1
+          fi
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+
+      - uses: supabase/setup-cli@v1
+        if: steps.origin.outputs.enabled == 'true'
+        with:
+          version: 2.115.0
+
+      - name: Allow STAGE web origin as Edge Function OAuth redirect
+        if: steps.origin.outputs.enabled == 'true'
+        run: |
+          set -euo pipefail
+          want="$(printf '%s' "$STAGE_WEB_ORIGIN" | sha256sum | cut -d' ' -f1)"
+          have="$(supabase secrets list --project-ref "$STAGE_PROJECT_REF" -o json | jq -r '.[] | select(.name == "APP_REDIRECT_ALLOWLIST") | .value')"
+          if [ -z "$have" ]; then
+            supabase secrets set --project-ref "$STAGE_PROJECT_REF" "APP_REDIRECT_ALLOWLIST=$STAGE_WEB_ORIGIN"
+            echo "APP_REDIRECT_ALLOWLIST set to $STAGE_WEB_ORIGIN"
+          elif [ "$have" = "$want" ]; then
+            echo "APP_REDIRECT_ALLOWLIST already $STAGE_WEB_ORIGIN"
+          else
+            echo "ERROR: APP_REDIRECT_ALLOWLIST holds another value; refusing to overwrite"
+            exit 1
+          fi
+
+      - name: Allow STAGE web origin as Supabase Auth redirect
+        if: steps.origin.outputs.enabled == 'true'
+        run: |
+          set -euo pipefail
+          api="https://api.supabase.com/v1/projects/$STAGE_PROJECT_REF/config/auth"
+          current="$(curl -fsS -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" "$api" | jq -r '.uri_allow_list // ""')"
+          entry="$STAGE_WEB_ORIGIN/**"
+          if printf '%s' "$current" | tr ',' '\n' | grep -Fxq "$entry"; then
+            echo "Auth redirect already allowed: $entry"
+            exit 0
+          fi
+          next="${current:+$current,}$entry"
+          curl -fsS -o /dev/null -X PATCH -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d "$(jq -cn --arg v "$next" '{uri_allow_list: $v}')" "$api"
+          echo "Auth redirect allowed: $entry"

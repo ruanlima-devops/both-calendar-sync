@@ -1,5 +1,12 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
-import { randomHex } from './crypto/tokens.ts';
+import {
+  decryptSecret,
+  encryptSecret,
+  randomHex,
+  sha256Hex,
+  timingSafeEqual,
+  toBase64Url,
+} from './crypto/tokens.ts';
 import { corsHeaders, envOptional, logSafe } from './http.ts';
 
 export type OAuthProvider = 'GOOGLE' | 'MICROSOFT';
@@ -13,6 +20,11 @@ export type ConsumedOAuthState = {
 };
 
 const STATE_TTL_MS = 10 * 60_000;
+export const TICKET_TTL_MS = 5 * 60_000;
+/** base64url, at least 128 bits. */
+const CLIENT_NONCE_PATTERN = /^[A-Za-z0-9_-]{22,128}$/;
+/** base64url of 32 random bytes. */
+const TICKET_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
 export function oauthStates(db: SupabaseClient) {
   return db.from('oauth_states');
@@ -48,6 +60,11 @@ export function defaultAppRedirect(): string {
   const appUrl = envOptional('APP_URL');
   if (appUrl) return appUrl;
   throw new Error('invalid_oauth_redirect');
+}
+
+/** Callback return when the state (and its redirect) is unknown: the app `/oauth` route can still close a popup. */
+export function defaultOAuthReturn(): string {
+  return new URL('/oauth', defaultAppRedirect()).toString();
 }
 
 /** Prevent open redirects after calendar OAuth. */
@@ -126,17 +143,36 @@ export function statePrefix(state: string): string {
   return state.slice(0, 8);
 }
 
+/** The browser/app that starts OAuth keeps this nonce; only its hash reaches the database. */
+export function clientNonceFromBody(body: Record<string, unknown>): string {
+  const value = body.client_nonce;
+  if (typeof value !== 'string' || !CLIENT_NONCE_PATTERN.test(value)) {
+    throw new Error('invalid_client_nonce');
+  }
+  return value;
+}
+
+function randomTicket(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  let binary = '';
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return toBase64Url(btoa(binary));
+}
+
 export async function createOAuthState(
   db: SupabaseClient,
-  input: { userId: string; provider: OAuthProvider; verifier: string; redirect: string },
+  input: { userId: string; provider: OAuthProvider; verifier: string; redirect: string; clientNonce: string },
 ): Promise<string> {
+  if (!CLIENT_NONCE_PATTERN.test(input.clientNonce)) throw new Error('invalid_client_nonce');
   const state = randomHex(32);
+  await oauthStates(db).delete().eq('user_id', input.userId).lt('expires_at', new Date().toISOString());
   const { error } = await oauthStates(db).insert({
     user_id: input.userId,
     provider: input.provider,
     state,
     code_verifier: input.verifier,
     redirect_to: input.redirect,
+    client_nonce_hash: await sha256Hex(input.clientNonce),
     expires_at: new Date(Date.now() + STATE_TTL_MS).toISOString(),
   });
   if (error) {
@@ -151,11 +187,11 @@ export async function createOAuthState(
   return state;
 }
 
-export async function consumeOAuthState(
+async function loadPendingState(
   db: SupabaseClient,
   state: string,
   provider: OAuthProvider,
-): Promise<ConsumedOAuthState | null> {
+): Promise<Record<string, unknown> | null> {
   if (!state) {
     logSafe('oauth_callback_missing_state', { provider });
     return null;
@@ -178,6 +214,17 @@ export async function consumeOAuthState(
     logSafe('oauth_state_expired', { provider, statePrefix: statePrefix(state) });
     return null;
   }
+  return row as Record<string, unknown>;
+}
+
+/** Error/cancel callbacks: burn the state so it can never be exchanged. */
+export async function consumeOAuthState(
+  db: SupabaseClient,
+  state: string,
+  provider: OAuthProvider,
+): Promise<ConsumedOAuthState | null> {
+  const row = await loadPendingState(db, state, provider);
+  if (!row) return null;
 
   const { data: consumed, error } = await oauthStates(db)
     .delete()
@@ -200,105 +247,232 @@ export async function consumeOAuthState(
   };
 }
 
-export function oauthResultPage(input: {
-  ok: boolean;
-  provider: 'google' | 'microsoft';
-  title: string;
-  message: string;
-  redirectTo: string;
-  error?: string;
-}): Response {
-  const redirect = withQuery(
-    input.redirectTo,
-    input.ok
-      ? `connected=${input.provider}`
-      : `oauth_error=${input.error ?? 'oauth_failed'}&provider=${input.provider}`,
-  );
+export type IssuedTicket = { ticket: string; redirect: string; userId: string };
 
-  if (isWebPopupReturn(input.redirectTo)) {
-    let targetOrigin = '*';
-    try {
-      targetOrigin = new URL(input.redirectTo).origin;
-    } catch {
-      /* keep wildcard fallback */
-    }
-    const payload = {
-      type: 'unify-calendar-oauth',
-      ok: input.ok,
+/**
+ * Successful provider callback: atomically turn the pending state into a single-use completion
+ * ticket. The callback is unauthenticated, so it never exchanges the code or touches connections.
+ */
+export async function issueCompletionTicket(
+  db: SupabaseClient,
+  input: { state: string; provider: OAuthProvider; code: string; encryptionKey: string },
+): Promise<IssuedTicket | null> {
+  const row = await loadPendingState(db, input.state, input.provider);
+  if (!row) return null;
+  if (!row.client_nonce_hash) {
+    logSafe('oauth_state_unbound', { provider: input.provider, statePrefix: statePrefix(input.state) });
+    await oauthStates(db).delete().eq('id', row.id as string);
+    return null;
+  }
+
+  const ticket = randomTicket();
+  const now = Date.now();
+  const ticketExpiresAt = new Date(now + TICKET_TTL_MS).toISOString();
+  const { data: issued, error } = await oauthStates(db)
+    .update({
+      used_at: new Date(now).toISOString(),
+      ticket_hash: await sha256Hex(ticket),
+      encrypted_code: await encryptSecret(input.code, input.encryptionKey),
+      ticket_expires_at: ticketExpiresAt,
+      expires_at: ticketExpiresAt,
+    })
+    .eq('id', row.id as string)
+    .is('used_at', null)
+    .select('id')
+    .maybeSingle();
+  if (error || !issued) {
+    logSafe('oauth_state_consume_failed', { provider: input.provider, statePrefix: statePrefix(input.state) });
+    return null;
+  }
+
+  logSafe('oauth_ticket_issued', {
+    provider: input.provider,
+    userId: row.user_id,
+    statePrefix: statePrefix(input.state),
+  });
+  return {
+    ticket,
+    redirect: (row.redirect_to as string | null) ?? defaultOAuthReturn(),
+    userId: row.user_id as string,
+  };
+}
+
+export type CompletionContext = { userId: string; provider: OAuthProvider; verifier: string; code: string };
+
+export type FinalizeDenial =
+  | 'invalid_ticket'
+  | 'ticket_expired'
+  | 'provider_mismatch'
+  | 'user_mismatch'
+  | 'nonce_mismatch';
+
+/**
+ * Redeem a completion ticket for the authenticated user. The ticket is deleted before any check,
+ * so a denied attempt also invalidates it.
+ */
+export async function consumeCompletionTicket(
+  db: SupabaseClient,
+  input: {
+    ticket: unknown;
+    clientNonce: unknown;
+    userId: string;
+    provider: OAuthProvider;
+    encryptionKey: string;
+  },
+): Promise<{ ok: true; context: CompletionContext } | { ok: false; reason: FinalizeDenial }> {
+  const deny = (reason: FinalizeDenial) => {
+    logSafe('oauth_finalize_denied', { reason, provider: input.provider, userId: input.userId });
+    return { ok: false as const, reason };
+  };
+
+  if (typeof input.ticket !== 'string' || !TICKET_PATTERN.test(input.ticket)) return deny('invalid_ticket');
+  const { data: row } = await oauthStates(db)
+    .delete()
+    .eq('ticket_hash', await sha256Hex(input.ticket))
+    .select('*')
+    .maybeSingle();
+  if (!row) return deny('invalid_ticket');
+
+  const expiresAt = row.ticket_expires_at ? new Date(row.ticket_expires_at as string).getTime() : 0;
+  if (!(expiresAt > Date.now())) return deny('ticket_expired');
+  if (row.provider !== input.provider) return deny('provider_mismatch');
+  if (row.user_id !== input.userId) return deny('user_mismatch');
+
+  const nonceOk =
+    typeof input.clientNonce === 'string' &&
+    CLIENT_NONCE_PATTERN.test(input.clientNonce) &&
+    typeof row.client_nonce_hash === 'string' &&
+    timingSafeEqual(row.client_nonce_hash, await sha256Hex(input.clientNonce));
+  if (!nonceOk) return deny('nonce_mismatch');
+
+  logSafe('oauth_ticket_redeemed', { provider: input.provider, userId: input.userId });
+  return {
+    ok: true,
+    context: {
+      userId: row.user_id as string,
+      provider: row.provider as OAuthProvider,
+      verifier: row.code_verifier as string,
+      code: await decryptSecret(row.encrypted_code as string, input.encryptionKey),
+    },
+  };
+}
+
+export type FinalizeResult =
+  | { ok: true; status: 200 }
+  | { ok: false; status: 403 | 502; error: 'invalid_ticket' | 'token_exchange_failed' };
+
+/** Authenticated finalize: binding checks first; only then exchange, persist, sync and watch. */
+export async function finalizeOAuthConnection(
+  db: SupabaseClient,
+  input: {
+    userId: string;
+    provider: OAuthProvider;
+    body: Record<string, unknown>;
+    encryptionKey: string;
+  },
+  complete: (context: CompletionContext) => Promise<void>,
+): Promise<FinalizeResult> {
+  const redeemed = await consumeCompletionTicket(db, {
+    ticket: input.body.ticket,
+    clientNonce: input.body.client_nonce,
+    userId: input.userId,
+    provider: input.provider,
+    encryptionKey: input.encryptionKey,
+  });
+  if (!redeemed.ok) return { ok: false, status: 403, error: 'invalid_ticket' };
+  try {
+    await complete(redeemed.context);
+    return { ok: true, status: 200 };
+  } catch (error) {
+    logSafe('oauth_finalize_failed', {
       provider: input.provider,
-      error: input.ok ? null : (input.error ?? 'oauth_failed'),
-    };
-    const html = `<!DOCTYPE html>
-<html lang="pt-BR"><head><meta charset="utf-8"><title>${escapeHtml(input.title)}</title>
-<meta http-equiv="refresh" content="0;url=${escapeHtml(redirect)}"></head>
-<body><p>${escapeHtml(input.message)}</p>
-<p><a href="${escapeHtml(redirect)}">Continuar para o Both</a></p>
-<script>
-(function () {
-  var payload = ${JSON.stringify(payload)};
-  var fallback = ${JSON.stringify(redirect)};
-  var targetOrigin = ${JSON.stringify(targetOrigin)};
-  function notifyOpener() {
-    if (!window.opener || window.opener.closed) return false;
-    try {
-      window.opener.postMessage(payload, targetOrigin === '*' ? '*' : targetOrigin);
-      window.close();
-      return true;
-    } catch (e) {}
-    try {
-      window.opener.postMessage(payload, '*');
-      window.close();
-      return true;
-    } catch (e2) {}
-    return false;
-  }
-  if (!notifyOpener()) {
-    window.location.replace(fallback);
-  }
-})();
-</script></body></html>`;
-    return new Response(html, {
-      status: 200,
-      headers: {
-        ...corsHeaders,
-        'Content-Type': 'text/html; charset=utf-8',
-        'Cache-Control': 'no-store',
-      },
+      userId: input.userId,
+      message: error instanceof Error ? error.message : 'unknown',
     });
-  }
-
-  try {
-    return Response.redirect(redirect, 302);
-  } catch {
-    return new Response(null, {
-      status: 302,
-      headers: { ...corsHeaders, Location: redirect, 'Cache-Control': 'no-store' },
-    });
+    return { ok: false, status: 502, error: 'token_exchange_failed' };
   }
 }
 
-function isWebPopupReturn(url: string): boolean {
-  try {
-    const parsed = new URL(url.trim());
-    if (parsed.protocol === 'exp:' || parsed.protocol === 'exps:') return true;
-    if (
-      (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
-      (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1')
-    ) {
-      return true;
-    }
-    return false;
-  } catch {
-    return false;
-  }
+export type OAuthCallbackParams = { error: string | null; code: string | null; state: string };
+
+export type OAuthCallbackError =
+  | 'access_denied'
+  | 'provider_error'
+  | 'invalid_state'
+  | 'missing_code'
+  | 'token_exchange_failed';
+
+/** Provider redirects always carry `state`, `code` or `error`; the start request carries none. */
+export function oauthCallbackParams(url: URL): OAuthCallbackParams | null {
+  const error = url.searchParams.get('error');
+  const code = url.searchParams.get('code');
+  if (!error && !code && !url.searchParams.has('state')) return null;
+  return { error, code, state: url.searchParams.get('state') ?? '' };
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;');
+export function oauthCallbackRejection(
+  params: OAuthCallbackParams,
+  session: ConsumedOAuthState | null,
+): OAuthCallbackError | null {
+  if (params.error === 'access_denied') return 'access_denied';
+  if (params.error) return 'provider_error';
+  if (!session) return 'invalid_state';
+  if (!params.code) return 'missing_code';
+  return null;
+}
+
+/**
+ * Hosted Edge Functions serve text/html as text/plain, so the callback never renders a page:
+ * it always redirects to the app's /oauth route, which closes the web popup or finishes the
+ * native auth session. Success carries only the opaque completion ticket.
+ */
+export function oauthCallbackRedirect(input: {
+  provider: 'google' | 'microsoft';
+  redirectTo: string;
+  ticket?: string;
+  error?: OAuthCallbackError;
+}): Response {
+  const location = withQuery(
+    input.redirectTo,
+    input.ticket
+      ? `oauth_ticket=${input.ticket}&provider=${input.provider}`
+      : `oauth_error=${input.error ?? 'provider_error'}&provider=${input.provider}`,
+  );
+  return new Response(null, {
+    status: 302,
+    headers: { ...corsHeaders, Location: location, 'Cache-Control': 'no-store' },
+  });
+}
+
+/** Public provider callback: validate, then hand back a completion ticket or a safe error code. */
+export async function handleOAuthCallback(
+  db: SupabaseClient,
+  input: { callback: OAuthCallbackParams; provider: OAuthProvider; encryptionKey: string },
+): Promise<Response> {
+  const { callback, provider } = input;
+  const appProvider = provider === 'GOOGLE' ? 'google' : 'microsoft';
+  const reject = (redirectTo: string, reason: OAuthCallbackError, hasSession: boolean) => {
+    logSafe('oauth_callback_rejected', { provider, reason, providerError: callback.error, hasSession });
+    return oauthCallbackRedirect({ provider: appProvider, redirectTo, error: reason });
+  };
+
+  if (callback.error || !callback.code) {
+    const session = await consumeOAuthState(db, callback.state, provider);
+    return reject(
+      session?.redirect || defaultOAuthReturn(),
+      oauthCallbackRejection(callback, session) ?? 'invalid_state',
+      Boolean(session),
+    );
+  }
+
+  const issued = await issueCompletionTicket(db, {
+    state: callback.state,
+    provider,
+    code: callback.code,
+    encryptionKey: input.encryptionKey,
+  });
+  if (!issued) return reject(defaultOAuthReturn(), 'invalid_state', false);
+  return oauthCallbackRedirect({ provider: appProvider, redirectTo: issued.redirect, ticket: issued.ticket });
 }
 
 export function assertMicrosoftClientId(clientId: string): void {

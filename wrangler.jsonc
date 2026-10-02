@@ -1,0 +1,17 @@
+{
+  "$schema": "https://unpkg.com/wrangler@4/config-schema.json",
+  "name": "both-calendar-sync-stage",
+  "compatibility_date": "2026-09-01",
+  "build": {
+    "command": "npx expo export -p web"
+  },
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  },
+  "routes": [
+    { "pattern": "stage.bothcalendar.com", "custom_domain": true }
+  ],
+  "workers_dev": false,
+  "previews": {}
+}

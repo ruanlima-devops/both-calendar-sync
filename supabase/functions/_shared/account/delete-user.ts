@@ -9,6 +9,7 @@ import {
   isSafeExternalCleanupError,
   isTransientExternalCleanupError,
   revokeProviderAuthorization,
+  type RevokeResult,
 } from './oauth-revoke.ts';
 
 export type DeleteAccountResult = {
@@ -117,7 +118,18 @@ export async function deleteUserAccount(
   };
 }
 
-async function cleanupConnectionExternal(
+export type ExternalCleanupResult = {
+  webhooksStopped: number;
+  webhooksAlreadyGone: number;
+  webhooksUnstopped: number;
+  revoke: RevokeResult | 'no_token';
+};
+
+/**
+ * Stops provider watches/subscriptions and revokes the OAuth grant while credentials still exist.
+ * Shared by account deletion and calendar disconnect.
+ */
+export async function cleanupConnectionExternal(
   db: SupabaseClient,
   connectionId: string,
   provider: ProviderName,
@@ -126,8 +138,11 @@ async function cleanupConnectionExternal(
     getAccessToken: typeof getValidAccessToken;
     revoke: typeof revokeProviderAuthorization;
     resolveProvider: typeof providerFor;
+    logPrefix?: string;
   },
-): Promise<void> {
+): Promise<ExternalCleanupResult> {
+  const log = deps.logPrefix ?? 'account_delete';
+  const result: ExternalCleanupResult = { webhooksStopped: 0, webhooksAlreadyGone: 0, webhooksUnstopped: 0, revoke: 'no_token' };
   const { data: subs } = await db
     .from('webhook_subscriptions')
     .select('id, external_subscription_id, external_resource_id, expires_at, status')
@@ -141,7 +156,7 @@ async function cleanupConnectionExternal(
     const tokens = await deps.getAccessToken(db, connectionId);
     accessToken = tokens.accessToken;
   } catch (err) {
-    logSafe('account_delete_token_unavailable', {
+    logSafe(`${log}_token_unavailable`, {
       connectionId,
       provider,
       reason: isSafeExternalCleanupError(err) ? 'gone' : 'auth_or_error',
@@ -161,19 +176,22 @@ async function cleanupConnectionExternal(
             externalResourceId: sub.external_resource_id ? String(sub.external_resource_id) : undefined,
             expiresAt: String(sub.expires_at),
           });
+          result.webhooksStopped += 1;
         } catch (err) {
           if (isSafeExternalCleanupError(err)) {
+            result.webhooksAlreadyGone += 1;
             continue;
           }
           if (isTransientExternalCleanupError(err)) {
-            logSafe('account_delete_webhook_stop_blocked', { connectionId, provider, reason: 'transient' });
+            logSafe(`${log}_webhook_stop_blocked`, { connectionId, provider, reason: 'transient' });
             throw new AccountDeleteBlockedError('external_cleanup_transient');
           }
           if (isAuthExternalCleanupError(err)) {
-            logSafe('account_delete_webhook_stop_auth', { connectionId, provider });
+            logSafe(`${log}_webhook_stop_auth`, { connectionId, provider });
+            result.webhooksUnstopped += 1;
             continue;
           }
-          logSafe('account_delete_webhook_stop_blocked', { connectionId, provider, reason: 'unknown' });
+          logSafe(`${log}_webhook_stop_blocked`, { connectionId, provider, reason: 'unknown' });
           throw new AccountDeleteBlockedError('external_cleanup_failed');
         }
       }
@@ -182,13 +200,14 @@ async function cleanupConnectionExternal(
       if (isTransientExternalCleanupError(err)) {
         throw new AccountDeleteBlockedError('external_cleanup_transient');
       }
-      logSafe('account_delete_webhook_stop_failed', { connectionId, provider });
+      logSafe(`${log}_webhook_stop_failed`, { connectionId, provider });
       throw new AccountDeleteBlockedError('external_cleanup_failed');
     }
   } else if (!accessToken && activeSubs.length > 0 && provider !== 'ICLOUD') {
     // No usable token (typically AUTH_REQUIRED): cannot stop provider resources.
     // Continue local delete — orphan watches expire; user cannot re-auth mid-delete.
-    logSafe('account_delete_webhook_unstopped', { connectionId, provider, reason: 'no_access_token' });
+    logSafe(`${log}_webhook_unstopped`, { connectionId, provider, reason: 'no_access_token' });
+    result.webhooksUnstopped += activeSubs.length;
   }
 
   try {
@@ -207,7 +226,7 @@ async function cleanupConnectionExternal(
   // OAuth grant revoke is best-effort and must not block account deletion.
   const revokeToken = refreshToken || accessToken;
   if (revokeToken) {
-    await deps.revoke({ provider, token: revokeToken });
+    result.revoke = await deps.revoke({ provider, token: revokeToken });
   }
 
   if (activeSubs.length > 0) {
@@ -217,4 +236,5 @@ async function cleanupConnectionExternal(
       .eq('connection_id', connectionId)
       .eq('status', 'active');
   }
+  return result;
 }

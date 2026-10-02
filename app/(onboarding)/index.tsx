@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SessionSplash } from '@/components/auth/SessionSplash';
 import { useSession } from '@/context/session';
+import { showMessage } from '@/lib/confirm';
 import { connectCalendar } from '@/lib/oauth';
 import { supabase } from '@/lib/supabase';
 import { googleTheme, microsoftTheme } from '@/lib/theme';
@@ -29,7 +30,7 @@ export default function Onboarding() {
       const { data: rows } = await supabase.from('connected_calendars').select('*');
       setCalendars((rows ?? []) as ConnectedCalendar[]);
     } catch {
-      Alert.alert('Both', 'Não foi possível conectar o calendário. Tente novamente.');
+      showMessage('Both', 'Não foi possível conectar o calendário. Tente novamente.');
     }
   }
 
