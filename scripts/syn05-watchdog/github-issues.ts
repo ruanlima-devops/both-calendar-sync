@@ -24,7 +24,10 @@ export interface GithubIssuesPort {
   closeIncident(incident: IncidentRecord, evaluation: AlertEvaluation): Promise<IncidentRecord>;
 }
 
-export function isGithubWriteEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+/** Env bag for flag checks — avoids requiring full NodeJS.ProcessEnv in unit tests. */
+export type WatchdogEnv = Record<string, string | undefined>;
+
+export function isGithubWriteEnabled(env: WatchdogEnv = process.env): boolean {
   return env.BOTH_WATCHDOG_GITHUB_WRITE === '1' && env.BOTH_WATCHDOG_DRY_RUN !== '1';
 }
 
@@ -134,20 +137,20 @@ export class MemoryGithubIssues implements GithubIssuesPort {
   /** Seed a human issue that must never be mutated. */
   seedHumanIssue(partial?: Partial<IncidentRecord>): IncidentRecord {
     this.seq += 1;
+    const number = this.seq;
     const rec: IncidentRecord = {
-      fingerprint: 'human',
-      alert_id: 'HUMAN',
-      number: this.seq,
+      fingerprint: partial?.fingerprint ?? 'human',
+      alert_id: partial?.alert_id ?? 'HUMAN',
+      number,
       title: partial?.title ?? 'Human triage note',
-      state: 'open',
+      state: partial?.state ?? 'open',
       labels: partial?.labels ?? ['human'],
       body: partial?.body ?? 'manual',
-      opened_at: new Date().toISOString(),
-      last_seen_at: new Date().toISOString(),
-      bot_marker: '',
-      consecutive_healthy: 0,
-      ...partial,
-      number: this.seq,
+      opened_at: partial?.opened_at ?? new Date().toISOString(),
+      last_seen_at: partial?.last_seen_at ?? new Date().toISOString(),
+      bot_marker: partial?.bot_marker ?? '',
+      consecutive_healthy: partial?.consecutive_healthy ?? 0,
+      resolved_at: partial?.resolved_at,
     };
     this.store.set(rec.number, rec);
     return rec;
@@ -160,7 +163,11 @@ export class MemoryGithubIssues implements GithubIssuesPort {
  */
 export class DryRunGithubIssues implements GithubIssuesPort {
   readonly planned: Array<{ op: string; fingerprint: string }> = [];
-  constructor(private readonly inner: GithubIssuesPort = new MemoryGithubIssues()) {}
+  private readonly inner: GithubIssuesPort;
+
+  constructor(inner: GithubIssuesPort = new MemoryGithubIssues()) {
+    this.inner = inner;
+  }
 
   listBotIncidents(state?: 'open' | 'closed' | 'all') {
     return this.inner.listBotIncidents(state);

@@ -46,7 +46,8 @@ describe('SupabaseLogsClient', () => {
     expect(res.ok).toBe(true);
     expect(res.rows).toHaveLength(1);
     expect(fetchImpl).toHaveBeenCalledOnce();
-    const url = String(fetchImpl.mock.calls[0]![0]);
+    const calls = fetchImpl.mock.calls as unknown as Array<[unknown, ...unknown[]]>;
+    const url = String(calls[0]![0]);
     expect(url).toContain(STAGE_PROJECT_REF);
     expect(url).toContain('api.supabase.com');
     expect(url).not.toContain('token-token');
