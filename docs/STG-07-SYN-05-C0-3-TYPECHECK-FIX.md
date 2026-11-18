@@ -31,6 +31,19 @@
 - Push atualiza PR #17 → CI `pull_request` Application+Supabase (local) · contents:read
 - Watchdog workflows: só `workflow_dispatch` — não disparam no push
 
+## Remote evidence (post-push)
+
+| Item | Valor |
+|------|-------|
+| Commit | `8f71828f71734b1f6b9ee78bbe02dfa151e03fbd` |
+| PR #17 | DRAFT · head atualizado |
+| Application | **SUCCESS** (run `44401336419`) |
+| Supabase | **SUCCESS** |
+| Workers Builds | FAILURE (externo, não obrigatório) |
+| Deploy STAGE | **não** disparado |
+| Watchdog workflow runs | **nenhum** |
+| mergeStateStatus | `UNSTABLE` (Workers Builds) · merge ainda bloqueado por DRAFT + Deploy STAGE risk |
+
 ## Merge
 
-Continua **BLOCKED** pelo risco Deploy STAGE em merge→develop (C0.2).
+Continua **BLOCKED** pelo risco Deploy STAGE em merge→develop (C0.2) + DRAFT.
