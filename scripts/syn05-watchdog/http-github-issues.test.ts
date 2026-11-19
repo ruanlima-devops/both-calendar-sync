@@ -166,21 +166,21 @@ describe('HttpGithubIssues offline', () => {
   });
 
   it('legacy body without state fails closed (streak 0)', async () => {
-    const mem = new MemoryGithubIssues();
-    mem.seq = 1;
-    mem.store.set(1, {
-      fingerprint: 'ALERT-01|qszggrrjhcwltnmxpxcy|legacy',
-      alert_id: 'ALERT-01',
-      number: 1,
-      title: 'legacy',
-      state: 'open',
-      labels: ['both-watchdog'],
-      body: '<!-- both-syn05-watchdog -->\nboth-syn05-fp:ALERT-01|qszggrrjhcwltnmxpxcy|legacy\n',
-      opened_at: NOW,
-      last_seen_at: NOW,
-      bot_marker: '<!-- both-syn05-watchdog -->',
-      consecutive_healthy: 5,
-    });
+    const mem = MemoryGithubIssues.fromSerializedBodies([
+      {
+        fingerprint: 'ALERT-01|qszggrrjhcwltnmxpxcy|legacy',
+        alert_id: 'ALERT-01',
+        number: 1,
+        title: 'legacy',
+        state: 'open',
+        labels: ['both-watchdog'],
+        body: '<!-- both-syn05-watchdog -->\nboth-syn05-fp:ALERT-01|qszggrrjhcwltnmxpxcy|legacy\n',
+        opened_at: NOW,
+        last_seen_at: NOW,
+        bot_marker: '<!-- both-syn05-watchdog -->',
+        consecutive_healthy: 5,
+      },
+    ]);
     const list = await mem.listBotIncidents('open');
     expect(list[0]!.consecutive_healthy).toBe(0);
   });
