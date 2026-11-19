@@ -5,8 +5,8 @@ import { describe, expect, it, afterEach } from 'vitest';
 import {
   classifyDeployChanges,
   assertSec07TombstonePresent,
-} from './classify-deploy-changes.ts';
-import { assertDeployDecision } from './assert-deploy-decision.ts';
+} from './classify-deploy-changes';
+import { assertDeployDecision } from './assert-deploy-decision';
 import { readFileSync } from 'node:fs';
 
 const tmpDirs: string[] = [];

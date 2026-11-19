@@ -4,7 +4,7 @@
  */
 
 import { readFileSync, existsSync, appendFileSync } from 'node:fs';
-import type { ClassifyResult, DeployDecision } from './classify-deploy-changes.ts';
+import type { ClassifyResult, DeployDecision } from './classify-deploy-changes';
 
 const ALLOWED: DeployDecision[] = [
   'SAFE_SKIP',

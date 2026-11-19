@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { listChangedPaths } from './list-changed-paths.ts';
+import { listChangedPaths } from './list-changed-paths';
 
 describe('listChangedPaths fail-closed', () => {
   it('missing base/head → not ok', () => {
