@@ -8,7 +8,11 @@ export default defineConfig({
     },
   },
   test: {
-    include: ['supabase/functions/_shared/**/*.test.ts', 'lib/**/*.test.ts'],
+    include: [
+      'supabase/functions/_shared/**/*.test.ts',
+      'lib/**/*.test.ts',
+      'scripts/syn05-watchdog/**/*.test.ts',
+    ],
     environment: 'node',
   },
 });
