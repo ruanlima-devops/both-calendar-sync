@@ -1,8 +1,16 @@
 /**
- * GitHub Issues adapter — interface + in-memory fake.
- * Real write path is gated behind BOTH_WATCHDOG_GITHUB_WRITE=1 (never set in this phase).
+ * GitHub Issues adapter — interface + in-memory fake + DryRun.
+ * Real HTTP adapter lives in http-github-issues.ts (transport-injected; not used in C0).
+ * Write path gated behind BOTH_WATCHDOG_GITHUB_WRITE=1 (never set in this phase).
  */
 
+import {
+  applyEvaluationToState,
+  hydrateIncidentFromBody,
+  parseIncidentState,
+  pickCanonicalIncident,
+  upsertIncidentStateBlock,
+} from './incident-state.ts';
 import { redactText } from './redact.ts';
 import {
   BOT_FINGERPRINT_PREFIX,
@@ -22,6 +30,8 @@ export interface GithubIssuesPort {
   createIncident(evaluation: AlertEvaluation): Promise<IncidentRecord>;
   updateIncident(incident: IncidentRecord, evaluation: AlertEvaluation): Promise<IncidentRecord>;
   closeIncident(incident: IncidentRecord, evaluation: AlertEvaluation): Promise<IncidentRecord>;
+  /** Optional search-before-create; Memory/Http implement. */
+  findOpenByFingerprint?(fingerprint: string): Promise<IncidentRecord | null>;
 }
 
 /** Env bag for flag checks — avoids requiring full NodeJS.ProcessEnv in unit tests. */
@@ -68,22 +78,34 @@ export function isBotOwned(incident: IncidentRecord): boolean {
   );
 }
 
-/** In-memory fake for deterministic tests — no network. */
+/** In-memory fake for deterministic tests — no network. Embeds durable state in body. */
 export class MemoryGithubIssues implements GithubIssuesPort {
   private seq = 0;
   readonly store = new Map<number, IncidentRecord>();
 
   async listBotIncidents(state: 'open' | 'closed' | 'all' = 'open'): Promise<IncidentRecord[]> {
-    return [...this.store.values()].filter((i) => {
-      if (!isBotOwned(i)) return false;
-      if (state === 'all') return true;
-      return i.state === state;
-    });
+    return [...this.store.values()]
+      .filter((i) => {
+        if (!isBotOwned(i)) return false;
+        if (state === 'all') return true;
+        return i.state === state;
+      })
+      .map((i) => hydrateIncidentFromBody({ ...i }));
+  }
+
+  async findOpenByFingerprint(fingerprint: string): Promise<IncidentRecord | null> {
+    const open = await this.listBotIncidents('open');
+    return pickCanonicalIncident(open.filter((i) => i.fingerprint === fingerprint));
   }
 
   async createIncident(evaluation: AlertEvaluation): Promise<IncidentRecord> {
+    const existing = await this.findOpenByFingerprint(evaluation.fingerprint);
+    if (existing) return this.updateIncident(existing, evaluation);
+
     this.seq += 1;
     const now = new Date().toISOString();
+    const { state } = applyEvaluationToState(null, evaluation, now);
+    const body = upsertIncidentStateBlock(buildIssueBody(evaluation), state);
     const rec: IncidentRecord = {
       fingerprint: evaluation.fingerprint,
       alert_id: evaluation.alert_id,
@@ -91,47 +113,64 @@ export class MemoryGithubIssues implements GithubIssuesPort {
       title: buildIssueTitle(evaluation),
       state: 'open',
       labels: [BOT_LABEL, 'syn05', evaluation.severity],
-      body: buildIssueBody(evaluation),
+      body,
       opened_at: now,
       last_seen_at: now,
       bot_marker: BOT_MARKER,
-      consecutive_healthy: 0,
+      consecutive_healthy: state.consecutive_healthy,
     };
     this.store.set(rec.number, rec);
-    return { ...rec };
+    return hydrateIncidentFromBody({ ...rec });
   }
 
   async updateIncident(incident: IncidentRecord, evaluation: AlertEvaluation): Promise<IncidentRecord> {
     if (!isBotOwned(incident)) throw new Error('refuse_non_bot_issue');
     const now = new Date().toISOString();
+    const prevParsed = parseIncidentState(incident.body);
+    const prev = prevParsed.ok && prevParsed.trusted ? prevParsed.state : null;
+    const { state, skipDuplicateSample } = applyEvaluationToState(prev, evaluation, now);
     const firing = evaluation.evaluation_status === 'FIRING';
+    const consecutive = firing
+      ? 0
+      : skipDuplicateSample
+        ? incident.consecutive_healthy
+        : state.consecutive_healthy;
+    const nextState = { ...state, consecutive_healthy: consecutive };
     const next: IncidentRecord = {
       ...incident,
       title: buildIssueTitle(evaluation),
-      body: buildIssueBody(evaluation),
+      body: upsertIncidentStateBlock(buildIssueBody(evaluation), nextState),
       last_seen_at: now,
-      // Firing resets recovery streak; recovering/healthy paths preserve caller bump.
-      consecutive_healthy: firing ? 0 : incident.consecutive_healthy,
+      consecutive_healthy: consecutive,
       state: 'open',
       resolved_at: undefined,
     };
     this.store.set(next.number, next);
-    return { ...next };
+    return hydrateIncidentFromBody({ ...next });
   }
 
   async closeIncident(incident: IncidentRecord, evaluation: AlertEvaluation): Promise<IncidentRecord> {
     if (!isBotOwned(incident)) throw new Error('refuse_non_bot_issue');
     const now = new Date().toISOString();
+    const prevParsed = parseIncidentState(incident.body);
+    const prev = prevParsed.ok && prevParsed.trusted ? prevParsed.state : null;
+    const { state } = applyEvaluationToState(prev, evaluation, now);
+    const closedState = {
+      ...state,
+      alert_status: 'RESOLVED' as const,
+      consecutive_healthy: Math.max(state.consecutive_healthy, incident.consecutive_healthy, 2),
+      last_transition_at: now,
+    };
     const next: IncidentRecord = {
       ...incident,
       state: 'closed',
       resolved_at: now,
       last_seen_at: now,
-      body: `${buildIssueBody(evaluation)}\n\nresolved_at: ${now}`,
-      consecutive_healthy: incident.consecutive_healthy + 1,
+      body: upsertIncidentStateBlock(`${buildIssueBody(evaluation)}\n\nresolved_at: ${now}`, closedState),
+      consecutive_healthy: closedState.consecutive_healthy,
     };
     this.store.set(next.number, next);
-    return { ...next };
+    return hydrateIncidentFromBody({ ...next });
   }
 
   /** Seed a human issue that must never be mutated. */
@@ -155,6 +194,16 @@ export class MemoryGithubIssues implements GithubIssuesPort {
     this.store.set(rec.number, rec);
     return rec;
   }
+
+  /** Simulate process restart: new Memory hydrated only from body snapshots. */
+  static fromSerializedBodies(records: IncidentRecord[]): MemoryGithubIssues {
+    const mem = new MemoryGithubIssues();
+    for (const r of records) {
+      mem.seq = Math.max(mem.seq, r.number);
+      mem.store.set(r.number, { ...r });
+    }
+    return mem;
+  }
 }
 
 /**
@@ -172,10 +221,11 @@ export class DryRunGithubIssues implements GithubIssuesPort {
   listBotIncidents(state?: 'open' | 'closed' | 'all') {
     return this.inner.listBotIncidents(state);
   }
+  findOpenByFingerprint(fingerprint: string) {
+    return this.inner.findOpenByFingerprint?.(fingerprint) ?? Promise.resolve(null);
+  }
   async createIncident(evaluation: AlertEvaluation) {
     this.planned.push({ op: 'create', fingerprint: evaluation.fingerprint });
-    // Still mutate inner memory so reconciliation can be tested end-to-end in dry-run unit tests
-    // when using MemoryGithubIssues; for pure plan-only, use Recording only.
     return this.inner.createIncident(evaluation);
   }
   async updateIncident(incident: IncidentRecord, evaluation: AlertEvaluation) {

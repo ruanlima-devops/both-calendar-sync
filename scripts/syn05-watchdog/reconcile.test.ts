@@ -53,10 +53,21 @@ describe('issue reconciliation', () => {
     const issues = new DryRunGithubIssues(mem);
     const fire = firingEval();
     await reconcileIncidents(issues, [fire], { dryRun: true });
-    const healthy = firingEval({ evaluation_status: 'HEALTHY', evidence_summary: 'ok', observed_count: 0 });
-    const r1 = await reconcileIncidents(issues, [healthy], { dryRun: true, healthyToResolve: 2 });
+    const healthy1 = firingEval({
+      evaluation_status: 'HEALTHY',
+      evidence_summary: 'ok',
+      observed_count: 0,
+      time_window: { start: 't0', end: 'h1' },
+    });
+    const healthy2 = firingEval({
+      evaluation_status: 'HEALTHY',
+      evidence_summary: 'ok',
+      observed_count: 0,
+      time_window: { start: 't0', end: 'h2' },
+    });
+    const r1 = await reconcileIncidents(issues, [healthy1], { dryRun: true, healthyToResolve: 2 });
     expect(r1.actions.some((a) => a.type === 'resolve')).toBe(false);
-    const r2 = await reconcileIncidents(issues, [healthy], { dryRun: true, healthyToResolve: 2 });
+    const r2 = await reconcileIncidents(issues, [healthy2], { dryRun: true, healthyToResolve: 2 });
     expect(r2.actions.some((a) => a.type === 'resolve')).toBe(true);
   });
 
