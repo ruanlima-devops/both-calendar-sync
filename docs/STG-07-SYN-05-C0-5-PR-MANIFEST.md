@@ -2,7 +2,9 @@
 
 **Branch:** `feat/syn-05-deploy-safety-c0-5`  
 **Base:** `origin/develop` @ `344a4b7`  
-**Allowlist policy:** deploy-safety only
+**PR:** [#18](https://github.com/ruanlima-devops/both-calendar-sync/pull/18) — **DRAFT** — head `69e404a`  
+**Allowlist policy:** deploy-safety only  
+**Post-publish UTC:** 2026-11-19T00:03:37Z — develop/main unchanged; Deploy STAGE not triggered; PR #15/#17 intocados
 
 ## Manifest (expected commit paths)
 

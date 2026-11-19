@@ -134,7 +134,7 @@ Allowlist only (see PR manifest). No Edge Functions / OAuth / billing / migratio
 | Verdict | Result |
 |---------|--------|
 | **C0.5 LOCAL** | **PASS** |
-| **C0.5 PR PUBLICATION** | Proceed Gate C (draft only) |
+| **C0.5 PR PUBLICATION** | **PASS** — DRAFT [#18](https://github.com/ruanlima-devops/both-calendar-sync/pull/18) @ `69e404a` |
 | **BOOTSTRAP_CERTIFIED** | **BLOCKED** |
 | **SAFE_TO_MERGE** | **BLOCKED** |
 | **PR #17 MERGE READINESS** | Still **BLOCKED** (needs this guard on develop first + Gate D) |
