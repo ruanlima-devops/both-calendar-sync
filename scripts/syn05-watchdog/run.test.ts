@@ -66,4 +66,86 @@ describe('runWatchdogOnce', () => {
     const fps = open.map((i) => i.fingerprint);
     expect(new Set(fps).size).toBe(fps.length);
   });
+
+  it('result_truncated / incomplete does not yield HEALTHY evaluations', async () => {
+    const healthy: NormalizedSignal[] = [
+      {
+        kind: 'edge_http',
+        timestamp: new Date(NOW - 60_000).toISOString(),
+        status: 200,
+        functionName: 'reconcile-sync',
+        method: 'POST',
+      },
+    ];
+    const r = await runWatchdogOnce({
+      nowMs: NOW,
+      injectedSignals: healthy,
+      dataAvailable: true,
+      apiError: 'result_truncated',
+    });
+    for (const ev of r.evaluations) {
+      expect(ev.evaluation_status).not.toBe('HEALTHY');
+      expect(ev.evaluation_status).not.toBe('RESOLVED');
+    }
+  });
+
+  it('incomplete path does not advance consecutive_healthy streak', async () => {
+    // Fixed fingerprint avoids ALERT-01 dedupe_key drift (FIRING:billing-webhook vs HEALTHY:none).
+    const { reconcileIncidents } = await import('./reconcile.ts');
+    const mem = new MemoryGithubIssues();
+    const issues = new DryRunGithubIssues(mem);
+    const fp = 'ALERT-01|qszggrrjhcwltnmxpxcy|ALERT-01:billing-webhook';
+    const base = {
+      alert_id: 'ALERT-01' as const,
+      severity: 'P1' as const,
+      environment: 'stage' as const,
+      project_ref: 'qszggrrjhcwltnmxpxcy' as const,
+      observed_count: 3,
+      fingerprint: fp,
+      evidence_summary: 'test',
+      function_or_service: 'billing-webhook',
+    };
+
+    await reconcileIncidents(
+      issues,
+      [
+        {
+          ...base,
+          evaluation_status: 'FIRING',
+          time_window: { start: '2026-11-18T17:00:00.000Z', end: '2026-11-18T17:15:00.000Z' },
+        },
+      ],
+      { dryRun: true },
+    );
+    await reconcileIncidents(
+      issues,
+      [
+        {
+          ...base,
+          evaluation_status: 'HEALTHY',
+          time_window: { start: '2026-11-18T17:15:00.000Z', end: '2026-11-18T17:30:00.000Z' },
+        },
+      ],
+      { dryRun: true },
+    );
+    const afterHealthy = (await mem.listBotIncidents('open')).find((i) => i.fingerprint === fp);
+    expect(afterHealthy!.consecutive_healthy).toBe(1);
+
+    // UNKNOWN (truncated/incomplete mapping) must not advance streak or resolve.
+    const { actions } = await reconcileIncidents(
+      issues,
+      [
+        {
+          ...base,
+          evaluation_status: 'UNKNOWN',
+          evidence_summary: 'result_truncated_unknown',
+          time_window: { start: '2026-11-18T17:30:00.000Z', end: '2026-11-18T17:45:00.000Z' },
+        },
+      ],
+      { dryRun: true },
+    );
+    expect(actions.some((a) => a.type === 'resolve')).toBe(false);
+    const afterIncomplete = (await mem.listBotIncidents('open')).find((i) => i.fingerprint === fp);
+    expect(afterIncomplete!.consecutive_healthy).toBe(1);
+  });
 });
