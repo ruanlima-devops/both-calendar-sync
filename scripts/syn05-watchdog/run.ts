@@ -82,10 +82,15 @@ export async function runWatchdogOnce(opts: RunOptions = {}): Promise<WatchdogRu
           ...normalizeConsoleRows(consoleLogs.rows),
           ...(pg.ok ? normalizePostgresCronRows(pg.rows) : []),
         ];
-        if (edge.truncated || consoleLogs.truncated) {
-          // Fail-closed: truncated window must not be treated as full HEALTHY evidence for recovery.
+        const incomplete =
+          edge.completeness === 'incomplete' ||
+          consoleLogs.completeness === 'incomplete' ||
+          edge.truncated ||
+          consoleLogs.truncated ||
+          (pg.ok && (pg.completeness === 'incomplete' || pg.truncated));
+        if (incomplete) {
+          // Fail-closed: incomplete/truncated must not count as full HEALTHY evidence for recovery.
           apiError = 'result_truncated';
-          // Keep dataAvailable true for FIRING detection, but mark unknown recovery — handled by not resolving when truncated flag set on evaluations below.
         }
       }
     } catch (err) {
