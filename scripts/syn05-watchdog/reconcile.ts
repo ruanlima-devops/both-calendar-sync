@@ -66,9 +66,20 @@ export async function reconcileIncidents(
 
     if (ev.evaluation_status === 'FIRING') {
       if (!existing) {
-        actions.push({ type: 'create', evaluation: ev });
-        const created = await issues.createIncident(ev);
-        canonical.set(created.fingerprint, created);
+        // Prefer safe reopen of closed bot issue when port supports it (search-before-create still inside createIncident)
+        let closed: IncidentRecord | null = null;
+        if (issues.findClosedByFingerprint) {
+          closed = await issues.findClosedByFingerprint(ev.fingerprint);
+        }
+        if (closed && issues.reopenIncident) {
+          actions.push({ type: 'update', incident: closed, evaluation: ev });
+          const reopened = await issues.reopenIncident(closed, ev);
+          canonical.set(reopened.fingerprint, reopened);
+        } else {
+          actions.push({ type: 'create', evaluation: ev });
+          const created = await issues.createIncident(ev);
+          canonical.set(created.fingerprint, created);
+        }
       } else {
         actions.push({ type: 'update', incident: existing, evaluation: ev });
         const updated = await issues.updateIncident(existing, ev);

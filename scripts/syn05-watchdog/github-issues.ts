@@ -20,6 +20,8 @@ import {
   type IncidentRecord,
 } from './types.ts';
 
+export { BOT_FINGERPRINT_PREFIX, BOT_LABEL, BOT_MARKER };
+
 export type IssueSearchQuery = {
   label: string;
   state?: 'open' | 'closed' | 'all';
@@ -32,6 +34,9 @@ export interface GithubIssuesPort {
   closeIncident(incident: IncidentRecord, evaluation: AlertEvaluation): Promise<IncidentRecord>;
   /** Optional search-before-create; Memory/Http implement. */
   findOpenByFingerprint?(fingerprint: string): Promise<IncidentRecord | null>;
+  /** Optional closed lookup for safe reopen (C3-B.1). */
+  findClosedByFingerprint?(fingerprint: string): Promise<IncidentRecord | null>;
+  reopenIncident?(incident: IncidentRecord, evaluation: AlertEvaluation): Promise<IncidentRecord>;
 }
 
 /** Env bag for flag checks — avoids requiring full NodeJS.ProcessEnv in unit tests. */
@@ -98,9 +103,52 @@ export class MemoryGithubIssues implements GithubIssuesPort {
     return pickCanonicalIncident(open.filter((i) => i.fingerprint === fingerprint));
   }
 
+  async findClosedByFingerprint(fingerprint: string): Promise<IncidentRecord | null> {
+    const closed = await this.listBotIncidents('closed');
+    return pickCanonicalIncident(
+      closed.filter((i) => i.fingerprint === fingerprint && i.state === 'closed'),
+    );
+  }
+
+  async reopenIncident(incident: IncidentRecord, evaluation: AlertEvaluation): Promise<IncidentRecord> {
+    if (!isBotOwned(incident)) throw new Error('refuse_non_bot_issue');
+    if (evaluation.evaluation_status !== 'FIRING') throw new Error('reopen_refused_not_firing');
+    const parsed = parseIncidentState(incident.body);
+    if (!parsed.ok || !parsed.trusted) throw new Error('reopen_refused_corrupt_state');
+    if (
+      parsed.state.last_sample_window_end &&
+      evaluation.time_window.end &&
+      Date.parse(evaluation.time_window.end) < Date.parse(parsed.state.last_sample_window_end)
+    ) {
+      throw new Error('reopen_refused_stale_sample');
+    }
+    const now = new Date().toISOString();
+    const { state } = applyEvaluationToState(
+      { ...parsed.state, consecutive_healthy: 0, alert_status: 'FIRING' },
+      evaluation,
+      now,
+    );
+    const nextState = { ...state, consecutive_healthy: 0, alert_status: 'FIRING' as const, last_transition_at: now };
+    const next: IncidentRecord = {
+      ...incident,
+      state: 'open',
+      title: buildIssueTitle(evaluation),
+      body: upsertIncidentStateBlock(buildIssueBody(evaluation), nextState),
+      last_seen_at: now,
+      consecutive_healthy: 0,
+      resolved_at: undefined,
+    };
+    this.store.set(next.number, next);
+    return hydrateIncidentFromBody({ ...next });
+  }
+
   async createIncident(evaluation: AlertEvaluation): Promise<IncidentRecord> {
     const existing = await this.findOpenByFingerprint(evaluation.fingerprint);
     if (existing) return this.updateIncident(existing, evaluation);
+    const closed = await this.findClosedByFingerprint(evaluation.fingerprint);
+    if (closed && evaluation.evaluation_status === 'FIRING') {
+      return this.reopenIncident(closed, evaluation);
+    }
 
     this.seq += 1;
     const now = new Date().toISOString();
@@ -151,9 +199,19 @@ export class MemoryGithubIssues implements GithubIssuesPort {
 
   async closeIncident(incident: IncidentRecord, evaluation: AlertEvaluation): Promise<IncidentRecord> {
     if (!isBotOwned(incident)) throw new Error('refuse_non_bot_issue');
+    if (
+      evaluation.evaluation_status === 'UNKNOWN' ||
+      evaluation.evaluation_status === 'DATA_UNAVAILABLE'
+    ) {
+      throw new Error('close_refused_incomplete_evaluation');
+    }
     const now = new Date().toISOString();
     const prevParsed = parseIncidentState(incident.body);
     const prev = prevParsed.ok && prevParsed.trusted ? prevParsed.state : null;
+    const effective = Math.max(prev?.consecutive_healthy ?? 0, incident.consecutive_healthy);
+    if (effective < 2) {
+      throw new Error('close_refused_insufficient_healthy_streak');
+    }
     const { state } = applyEvaluationToState(prev, evaluation, now);
     const closedState = {
       ...state,
@@ -223,6 +281,16 @@ export class DryRunGithubIssues implements GithubIssuesPort {
   }
   findOpenByFingerprint(fingerprint: string) {
     return this.inner.findOpenByFingerprint?.(fingerprint) ?? Promise.resolve(null);
+  }
+  findClosedByFingerprint(fingerprint: string) {
+    return this.inner.findClosedByFingerprint?.(fingerprint) ?? Promise.resolve(null);
+  }
+  reopenIncident(incident: IncidentRecord, evaluation: AlertEvaluation) {
+    if (!this.inner.reopenIncident) {
+      return this.inner.updateIncident(incident, evaluation);
+    }
+    this.planned.push({ op: 'reopen', fingerprint: evaluation.fingerprint });
+    return this.inner.reopenIncident(incident, evaluation);
   }
   async createIncident(evaluation: AlertEvaluation) {
     this.planned.push({ op: 'create', fingerprint: evaluation.fingerprint });
