@@ -24,7 +24,9 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.sync-calendar]
-verify_jwt = false
+# SEC-07: legacy endpoint retired (410 Gone). JWT required at gateway as defense
+# in depth; handler never processes jobId/calendarId/reconcile regardless of auth.
+verify_jwt = true
 
 [functions.sync-now]
 verify_jwt = true
