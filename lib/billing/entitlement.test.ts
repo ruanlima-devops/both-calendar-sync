@@ -102,3 +102,30 @@ describe('daysRemainingUntil', () => {
     expect(days).toBe(1);
   });
 });
+
+describe('expired / none entitlements', () => {
+  it('null subscription is expired without access', () => {
+    const ent = computeEntitlement(null);
+    expect(ent.hasAccess).toBe(false);
+    expect(ent.source).toBe('none');
+    expect(ent.status).toBe('expired');
+    expect(ent.trialUrgency).toBe('expired');
+  });
+
+  it('explicit expired status stays blocked', () => {
+    const ent = computeEntitlement(
+      { ...base, status: 'expired', trial_ends_at: '2026-07-01T00:00:00.000Z' },
+      new Date('2026-08-01T00:00:00.000Z'),
+    );
+    expect(ent.hasAccess).toBe(false);
+    expect(ent.trialUrgency).toBe('expired');
+  });
+
+  it('incomplete without active period is blocked', () => {
+    const ent = computeEntitlement(
+      { ...base, status: 'incomplete', trial_ends_at: null },
+      new Date('2026-08-01T00:00:00.000Z'),
+    );
+    expect(ent.hasAccess).toBe(false);
+  });
+});
