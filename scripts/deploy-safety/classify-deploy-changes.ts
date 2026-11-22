@@ -1,9 +1,17 @@
 /**
  * SYN-05 C0.5 — fail-closed deploy change classifier.
  * Callers supply changed paths; no network.
+ *
+ * C3-B.4: `.github/workflows/both-stage-watchdog-delivery.yml` may SAFE_SKIP
+ * only when path is exact and certified inert content validates (digest+structure).
  */
 
 import { readFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import {
+  INERT_DELIVERY_WORKFLOW_PATH,
+  validateInertDeliveryWorkflowContent,
+} from './inert-delivery-workflow.ts';
 
 export type DeployDecision =
   | 'SAFE_SKIP'
@@ -32,6 +40,13 @@ export type ClassifyResult = {
   run_functions: boolean;
 };
 
+export type ClassifyOptions = {
+  /** Repo root used to read workflow contents for inert-delivery allowlist. */
+  repoRoot?: string;
+  /** Optional content map; takes precedence over disk reads. */
+  contentByPath?: Record<string, string | null | undefined>;
+};
+
 export const SAFE_SKIP_PREFIXES = ['scripts/syn05-watchdog/', 'docs/', 'scripts/deploy-safety/'] as const;
 
 export const SAFE_SKIP_EXACT = new Set([
@@ -55,7 +70,21 @@ function isSafeSkip(path: string): boolean {
   return SAFE_SKIP_PREFIXES.some((prefix) => path.startsWith(prefix));
 }
 
-export function classifyDeployChanges(changedPaths: string[]): ClassifyResult {
+function readPathContent(path: string, options?: ClassifyOptions): string | null {
+  if (options?.contentByPath && Object.prototype.hasOwnProperty.call(options.contentByPath, path)) {
+    const v = options.contentByPath[path];
+    return v == null ? null : v;
+  }
+  const root = options?.repoRoot ?? process.cwd();
+  const abs = join(root, path);
+  if (!existsSync(abs)) return null;
+  return readFileSync(abs, 'utf8');
+}
+
+export function classifyDeployChanges(
+  changedPaths: string[],
+  options?: ClassifyOptions,
+): ClassifyResult {
   const paths = [...new Set(changedPaths.map(normalize).filter(Boolean))];
   const matched: ClassifyResult['matched'] = {
     safe_skip: [],
@@ -80,12 +109,50 @@ export function classifyDeployChanges(changedPaths: string[]): ClassifyResult {
     return blocked('UNKNOWN_BLOCKED', ['empty_changed_paths']);
   }
 
+  let inertDeliverySeen = false;
+  let inertDeliveryOk = false;
+  const inertReasons: string[] = [];
+
   for (const path of paths) {
+    // Exact-path allowlist for inert delivery workflow (never by prefix/rename).
+    if (path === INERT_DELIVERY_WORKFLOW_PATH) {
+      inertDeliverySeen = true;
+      const content = readPathContent(path, options);
+      if (content == null) {
+        inertReasons.push('inert_delivery_file_missing');
+        matched.other.push(path);
+        continue;
+      }
+      const v = validateInertDeliveryWorkflowContent(content);
+      if (!v.ok) {
+        inertReasons.push(...v.reasons);
+        matched.other.push(path);
+        continue;
+      }
+      inertDeliveryOk = true;
+      matched.safe_skip.push(path);
+      continue;
+    }
+
+    // Near-miss names must never inherit the allowlist.
+    if (
+      path.startsWith('.github/workflows/') &&
+      path.includes('watchdog-delivery') &&
+      path !== INERT_DELIVERY_WORKFLOW_PATH
+    ) {
+      matched.other.push(path);
+      inertReasons.push('inert_delivery_path_mismatch');
+      continue;
+    }
+
     if (isSafeSkip(path)) {
       matched.safe_skip.push(path);
       continue;
     }
-    if (path === '.github/workflows/deploy-stage.yml' || (path.startsWith('.github/workflows/') && path.includes('deploy'))) {
+    if (
+      path === '.github/workflows/deploy-stage.yml' ||
+      (path.startsWith('.github/workflows/') && path.includes('deploy') && path !== INERT_DELIVERY_WORKFLOW_PATH)
+    ) {
       matched.pipeline.push(path);
       continue;
     }
@@ -110,22 +177,39 @@ export function classifyDeployChanges(changedPaths: string[]): ClassifyResult {
   }
 
   if (matched.other.length) {
-    return blocked('UNKNOWN_BLOCKED', ['unclassified_paths', ...matched.other.slice(0, 5)]);
+    return blocked('UNKNOWN_BLOCKED', [
+      'unclassified_paths',
+      ...matched.other.slice(0, 5),
+      ...inertReasons.slice(0, 5),
+    ]);
   }
   if (matched.pipeline.length) {
+    // Delivery YAML must not land beside deploy-stage / other pipeline edits.
+    if (inertDeliverySeen) {
+      return blocked('UNKNOWN_BLOCKED', ['inert_delivery_workflow_mixed_changeset', 'pipeline_workflow_changed']);
+    }
     return blocked('BOOTSTRAP_REVIEW', ['pipeline_workflow_changed']);
   }
   if (matched.config.length && !matched.migrations.length && !matched.functions.length) {
+    if (inertDeliverySeen) {
+      return blocked('UNKNOWN_BLOCKED', ['inert_delivery_workflow_mixed_changeset', 'supabase_config_changed']);
+    }
     return blocked('REQUIRES_REVIEW', ['supabase_config_changed']);
   }
 
   const db = matched.migrations.length > 0;
   const fn = matched.functions.length > 0 || matched.config.length > 0;
 
+  if (inertDeliverySeen && (db || fn)) {
+    return blocked('UNKNOWN_BLOCKED', ['inert_delivery_workflow_mixed_changeset']);
+  }
+
   if (!db && !fn) {
     return {
       decision: 'SAFE_SKIP',
-      reasons: ['only_safe_skip_paths'],
+      reasons: inertDeliveryOk
+        ? ['only_safe_skip_paths', 'inert_delivery_workflow_certified']
+        : ['only_safe_skip_paths'],
       matched,
       may_skip_remote_deploy: true,
       run_db: false,
@@ -213,7 +297,7 @@ if (isMain) {
         .split(/\r?\n/)
         .map((l) => l.trim())
         .filter((l) => l && !l.startsWith('#'));
-      const result = classifyDeployChanges(paths);
+      const result = classifyDeployChanges(paths, { repoRoot: process.cwd() });
       console.log(JSON.stringify(result, null, 2));
       if (result.decision === 'UNKNOWN_BLOCKED' || result.decision === 'BOOTSTRAP_REVIEW' || result.decision === 'REQUIRES_REVIEW') {
         process.exitCode = 2;

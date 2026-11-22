@@ -1,0 +1,51 @@
+# SYN-05 / C3-B.4.1 — Delivery workflow SCAFFOLDING (DISABLED)
+#
+# This file is intentionally NON-EXECUTABLE.
+# `on: {}` means GitHub Actions will not schedule or dispatch this workflow.
+#
+# Future activation requires SEPARATE Product Owner authorization for:
+# - executable triggers (never schedule until C3-D)
+# - job-scoped GITHUB_TOKEN with issues:write on Delivery job ONLY
+# - WRITE_AUTHORIZED gate + supervised-write mode
+# - classifier allowlist review (C3-B.4.1 Deploy Safety: UNKNOWN_BLOCKED until then)
+#
+# Collector / Evaluator must NEVER receive issues:write.
+# Delivery must NEVER receive SUPABASE_ACCESS_TOKEN / DB secrets.
+# Real HttpGithubIssues remains unwired in C0 runtime.
+
+name: Both STAGE Watchdog Delivery (disabled)
+
+# DISABLED — no executable triggers authorized in C3-B.4.1
+on: {}
+
+permissions:
+  contents: read
+  # issues: write — INTENTIONALLY OMITTED. Job-scoped grant only after future PO auth.
+
+concurrency:
+  group: both-stage-watchdog-delivery-qszggrrjhcwltnmxpxcy
+  cancel-in-progress: false
+
+# Documented future env defaults (not applied until triggers exist):
+# BOTH_WATCHDOG_DRY_RUN: '1'
+# BOTH_WATCHDOG_GITHUB_WRITE: '0'
+# BOTH_WATCHDOG_ENABLE_NETWORK: '0'
+# BOTH_WATCHDOG_DELIVERY_MODE: 'simulation'
+# STAGE_PROJECT_REF: qszggrrjhcwltnmxpxcy
+
+jobs:
+  # Placeholder job graph for future split — inert while `on: {}`.
+  delivery-inert:
+    name: Delivery inert (never scheduled)
+    if: ${{ false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Future job permissions (NOT granted now):
+    # permissions:
+    #   contents: read
+    #   issues: write
+    steps:
+      - name: Refuse execution
+        run: |
+          echo "C3-B.4.1 delivery workflow is disabled." >&2
+          exit 1
