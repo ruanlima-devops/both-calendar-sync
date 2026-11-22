@@ -1,7 +1,7 @@
 /**
- * C3-B.4.1 — Fail-closed write authorization gate.
+ * C3-B.5 — Fail-closed write authorization gate.
  * PERMISSION_AVAILABLE ≠ WRITE_AUTHORIZED.
- * Defaults: DRY_RUN=1, WRITE=0, NETWORK=0. No real writes in this phase.
+ * Defaults: DRY_RUN=1, WRITE=0, NETWORK=0. Supervised oneshot requires explicit auth bag.
  */
 
 import {
@@ -9,6 +9,7 @@ import {
   type ArtifactValidationOk,
   type DeliveryArtifactV1,
 } from './delivery-artifact.ts';
+import { C3_B5_FINGERPRINT_PREFIX } from './supervised-quota.ts';
 import { STAGE_ENVIRONMENT, STAGE_PROJECT_REF } from './types.ts';
 
 export type DeliveryMode = 'simulation' | 'read-only' | 'supervised-write' | 'scheduled-write';
@@ -30,6 +31,13 @@ export type WriteGateInput = {
   within_authorized_window?: boolean;
   operations_remaining?: number;
   trusted_provenance?: boolean;
+  /** C3-B.5 Actions context */
+  actions_event_name?: string;
+  actions_workflow_name?: string;
+  actions_job_name?: string;
+  actions_ref?: string;
+  expected_commit_sha?: string;
+  synthetic_fixture?: boolean;
 };
 
 export type WriteGateDecision =
@@ -37,6 +45,8 @@ export type WriteGateDecision =
   | { authorized: true; mode: DeliveryMode; note: string };
 
 export const ALLOWED_REPO = 'ruanlima-devops/both-calendar-sync' as const;
+export const C3_B5_WORKFLOW_NAME = 'Both STAGE Watchdog Delivery' as const;
+export const C3_B5_JOB_NAME = 'delivery-supervised' as const;
 
 export function resolveDeliveryMode(env: WriteGateEnv = {}): DeliveryMode | 'blocked' {
   const mode = env.BOTH_WATCHDOG_DELIVERY_MODE;
@@ -57,9 +67,13 @@ export function isNetworkFlagOn(env: WriteGateEnv = {}): boolean {
   return env.BOTH_WATCHDOG_ENABLE_NETWORK === '1';
 }
 
+export function isC3B5Authorized(env: WriteGateEnv = {}): boolean {
+  return env.BOTH_WATCHDOG_C3_B5_AUTHORIZED === '1';
+}
+
 /**
- * Fail-closed gate. In C3-B.4.1 every path that would write returns unauthorized.
- * Even future WRITE=1 + permissions require mode + provenance + completeness.
+ * Fail-closed gate. WRITE=1 alone never authorizes.
+ * C3-B.5 supervised path requires full auth bag + synthetic fixture fingerprint.
  */
 export function evaluateWriteGate(input: WriteGateInput): WriteGateDecision {
   const env = input.env ?? {};
@@ -69,16 +83,13 @@ export function evaluateWriteGate(input: WriteGateInput): WriteGateDecision {
     return { authorized: false, code: 'mode_invalid', mode: 'blocked' };
   }
 
-  // Conflicting / unsafe flags
   if (isWriteFlagOn(env) && isDryRun(env)) {
     return { authorized: false, code: 'conflicting_flags_write_with_dry_run', mode };
   }
   if (isNetworkFlagOn(env) && !isWriteFlagOn(env) && mode === 'supervised-write') {
-    // Network alone never authorizes GitHub write
     return { authorized: false, code: 'network_without_write_auth', mode };
   }
 
-  // Defaults: dry-run / write off → never authorize mutation
   if (isDryRun(env) || !isWriteFlagOn(env)) {
     return { authorized: false, code: 'write_disabled_by_default', mode };
   }
@@ -87,7 +98,19 @@ export function evaluateWriteGate(input: WriteGateInput): WriteGateDecision {
     return { authorized: false, code: 'mode_forbids_write', mode };
   }
 
-  // Permission available is necessary but not sufficient
+  if (mode === 'scheduled-write') {
+    return { authorized: false, code: 'scheduled_write_not_authorized', mode };
+  }
+
+  // C3-B.4.1 hard stop unless explicitly lifted for C3-B.5 oneshot
+  if (env.BOTH_WATCHDOG_C3_B41_FORCE_BLOCK !== '0') {
+    return { authorized: false, code: 'c3_b41_hard_block', mode };
+  }
+
+  if (!isC3B5Authorized(env)) {
+    return { authorized: false, code: 'c3_b5_not_authorized', mode };
+  }
+
   if (!input.permission_issues_write_available) {
     return { authorized: false, code: 'permission_not_available', mode };
   }
@@ -128,15 +151,38 @@ export function evaluateWriteGate(input: WriteGateInput): WriteGateDecision {
     return { authorized: false, code: 'artifact_forbids_mutation', mode };
   }
 
-  // C3-B.4.1 hard stop: never authorize even if all flags green in tests
-  if (env.BOTH_WATCHDOG_C3_B41_FORCE_BLOCK !== '0') {
-    return { authorized: false, code: 'c3_b41_hard_block', mode };
+  // Synthetic fixture only — refuse real operational fingerprints
+  if (input.synthetic_fixture === false) {
+    return { authorized: false, code: 'fixture_not_synthetic', mode };
+  }
+  if (!input.artifact.fingerprint.startsWith(C3_B5_FINGERPRINT_PREFIX)) {
+    return { authorized: false, code: 'fingerprint_not_c3_b5_test', mode };
+  }
+
+  // Actions context binding
+  if (input.actions_event_name && input.actions_event_name !== 'workflow_dispatch') {
+    return { authorized: false, code: 'unexpected_event', mode };
+  }
+  if (input.actions_workflow_name && input.actions_workflow_name !== C3_B5_WORKFLOW_NAME) {
+    return { authorized: false, code: 'workflow_not_authorized', mode };
+  }
+  if (input.actions_job_name && input.actions_job_name !== C3_B5_JOB_NAME) {
+    return { authorized: false, code: 'job_not_authorized', mode };
+  }
+  if (input.actions_ref && input.actions_ref !== 'refs/heads/develop') {
+    return { authorized: false, code: 'ref_not_develop', mode };
+  }
+  if (
+    input.expected_commit_sha &&
+    input.artifact.source_commit_sha.toLowerCase() !== input.expected_commit_sha.toLowerCase()
+  ) {
+    return { authorized: false, code: 'commit_sha_mismatch', mode };
   }
 
   return {
     authorized: true,
-    mode,
-    note: 'write_authorized_theoretical_only',
+    mode: 'supervised-write',
+    note: 'c3_b5_supervised_oneshot_authorized',
   };
 }
 
@@ -148,6 +194,7 @@ export function defaultC0Env(extra: WriteGateEnv = {}): WriteGateEnv {
     BOTH_WATCHDOG_ENABLE_NETWORK: '0',
     BOTH_WATCHDOG_DELIVERY_MODE: 'simulation',
     BOTH_WATCHDOG_C3_B41_FORCE_BLOCK: '1',
+    BOTH_WATCHDOG_C3_B5_AUTHORIZED: '0',
     ...extra,
   };
 }

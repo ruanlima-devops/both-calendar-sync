@@ -1,51 +1,93 @@
-# SYN-05 / C3-B.4.1 — Delivery workflow SCAFFOLDING (DISABLED)
+# SYN-05 / C3-B.5 — Delivery workflow (OFF by default; oneshot supervised path)
 #
-# This file is intentionally NON-EXECUTABLE.
-# `on: {}` means GitHub Actions will not schedule or dispatch this workflow.
+# Empty-run fix: do NOT use bare `on: {}` (YAML 1.1 / Actions registers invalid
+# push runs with zero jobs). Use quoted "on" + workflow_dispatch only.
 #
-# Future activation requires SEPARATE Product Owner authorization for:
-# - executable triggers (never schedule until C3-D)
-# - job-scoped GITHUB_TOKEN with issues:write on Delivery job ONLY
-# - WRITE_AUTHORIZED gate + supervised-write mode
-# - classifier allowlist review (C3-B.4.1 Deploy Safety: UNKNOWN_BLOCKED until then)
+# Defaults:
+# - No schedule / push / pull_request / workflow_run
+# - Top-level permissions: contents: read only
+# - issues:write ONLY on job delivery-supervised (never Collector/Evaluator)
+# - ONESHOT path still fail-closed in code (quota + write gate + provenance)
 #
 # Collector / Evaluator must NEVER receive issues:write.
 # Delivery must NEVER receive SUPABASE_ACCESS_TOKEN / DB secrets.
-# Real HttpGithubIssues remains unwired in C0 runtime.
 
-name: Both STAGE Watchdog Delivery (disabled)
+name: Both STAGE Watchdog Delivery
 
-# DISABLED — no executable triggers authorized in C3-B.4.1
-on: {}
+# Quoted key avoids YAML 1.1 boolean coercion of `on`.
+"on":
+  workflow_dispatch:
+    inputs:
+      c3_b5_mode:
+        description: "OFF (default) or C3-B.5-ONESHOT (PO-authorized single trial)"
+        required: true
+        type: choice
+        options:
+          - OFF
+          - C3-B.5-ONESHOT
+        default: OFF
+      c3_b5_confirm:
+        description: "Must equal RUN once for oneshot; otherwise REFUSE"
+        required: true
+        type: string
+        default: REFUSE
 
 permissions:
   contents: read
-  # issues: write — INTENTIONALLY OMITTED. Job-scoped grant only after future PO auth.
 
 concurrency:
   group: both-stage-watchdog-delivery-qszggrrjhcwltnmxpxcy
   cancel-in-progress: false
 
-# Documented future env defaults (not applied until triggers exist):
-# BOTH_WATCHDOG_DRY_RUN: '1'
-# BOTH_WATCHDOG_GITHUB_WRITE: '0'
-# BOTH_WATCHDOG_ENABLE_NETWORK: '0'
-# BOTH_WATCHDOG_DELIVERY_MODE: 'simulation'
-# STAGE_PROJECT_REF: qszggrrjhcwltnmxpxcy
-
 jobs:
-  # Placeholder job graph for future split — inert while `on: {}`.
-  delivery-inert:
-    name: Delivery inert (never scheduled)
-    if: ${{ false }}
+  delivery-off:
+    name: Delivery OFF (refuse)
+    if: ${{ inputs.c3_b5_mode != 'C3-B.5-ONESHOT' || inputs.c3_b5_confirm != 'RUN' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # Future job permissions (NOT granted now):
-    # permissions:
-    #   contents: read
-    #   issues: write
+    permissions:
+      contents: read
     steps:
-      - name: Refuse execution
+      - name: Refuse supervised write
         run: |
-          echo "C3-B.4.1 delivery workflow is disabled." >&2
-          exit 1
+          echo "C3-B.5 delivery workflow is OFF / not authorized for this dispatch."
+          echo "mode=${{ inputs.c3_b5_mode }}"
+          exit 0
+
+  delivery-supervised:
+    name: Delivery supervised oneshot
+    if: ${{ inputs.c3_b5_mode == 'C3-B.5-ONESHOT' && inputs.c3_b5_confirm == 'RUN' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    env:
+      BOTH_WATCHDOG_DRY_RUN: "0"
+      BOTH_WATCHDOG_GITHUB_WRITE: "1"
+      BOTH_WATCHDOG_ENABLE_NETWORK: "1"
+      BOTH_WATCHDOG_DELIVERY_MODE: supervised-write
+      BOTH_WATCHDOG_C3_B5_AUTHORIZED: "1"
+      BOTH_WATCHDOG_C3_B41_FORCE_BLOCK: "0"
+      STAGE_PROJECT_REF: qszggrrjhcwltnmxpxcy
+      GITHUB_REPOSITORY: ruanlima-devops/both-calendar-sync
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: "22"
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+      - name: Run supervised oneshot delivery
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          C3_B5_EXPECTED_COMMIT: ${{ github.sha }}
+          C3_B5_ACTIONS_RUN_ID: ${{ github.run_id }}
+          C3_B5_ACTIONS_WORKFLOW: ${{ github.workflow }}
+          C3_B5_ACTIONS_JOB: ${{ github.job }}
+          C3_B5_EVENT_NAME: ${{ github.event_name }}
+          C3_B5_REF: ${{ github.ref }}
+        run: node --experimental-strip-types scripts/syn05-watchdog/supervised-delivery-cli.ts

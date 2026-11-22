@@ -1,9 +1,15 @@
 /**
- * SYN-05 C3-B.4 — allowlist gate for the inert Delivery workflow only.
+ * SYN-05 C3-B.5 — certified Delivery workflow allowlist gate.
  *
- * Fail-closed: exact path + exact certified digest + structural inertness.
- * Filename alone never authorizes SAFE_SKIP. Future YAML edits must change the
- * pinned digest in a deliberate review (and still pass structural checks).
+ * Fail-closed: exact path + exact certified digest + structural rules.
+ * Filename alone never authorizes SAFE_SKIP.
+ *
+ * C3-B.5 shape (empty-run fix):
+ * - Quoted "on" with workflow_dispatch only (no bare on:{}).
+ * - No schedule/push/pull_request/workflow_run.
+ * - Top-level contents:read only.
+ * - issues:write only under job delivery-supervised.
+ * - Pinned actions/checkout + setup-node SHAs only.
  */
 
 import { createHash } from 'node:crypto';
@@ -13,65 +19,28 @@ import { join } from 'node:path';
 export const INERT_DELIVERY_WORKFLOW_PATH =
   '.github/workflows/both-stage-watchdog-delivery.yml' as const;
 
-/** Certified C3-B.4.1 disabled scaffold (on: {}). */
+/** C3-B.5 certified workflow bytes (workflow_dispatch OFF-by-default + oneshot job). */
 export const INERT_DELIVERY_WORKFLOW_SHA256 =
-  '9bf332340ac158eb3a80edb317e3a2adbc358843540ae5c144a700175820a44d' as const;
+  '63e3fad10e83da89c7d1a3e3511b0168ba17ebd8defeda72514fe37b5afb921a' as const;
+
+/** @deprecated alias kept for callers */
+export const CERTIFIED_DELIVERY_WORKFLOW_SHA256 = INERT_DELIVERY_WORKFLOW_SHA256;
+
+const ALLOWED_ACTION_USES = [
+  'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803',
+  'actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1',
+] as const;
 
 const BANNED_TRIGGER_KEYS = [
   'schedule',
-  'workflow_dispatch',
   'workflow_run',
   'pull_request_target',
   'push',
   'pull_request',
   'repository_dispatch',
   'release',
-  'create',
-  'delete',
-  'issue_comment',
-  'issues',
-  'discussion',
-  'check_run',
-  'check_suite',
-  'deployment',
-  'deployment_status',
-  'page_build',
-  'status',
-  'watch',
   'workflow_call',
 ] as const;
-
-const BANNED_PERMISSION_WRITES = [
-  'issues: write',
-  'issues:write',
-  'contents: write',
-  'contents:write',
-  'actions: write',
-  'actions:write',
-  'pull-requests: write',
-  'pull-requests:write',
-  'workflows: write',
-  'workflows:write',
-] as const;
-
-const BANNED_CONTENT_PATTERNS: { id: string; re: RegExp }[] = [
-  { id: 'secrets_context', re: /\$\{\{\s*secrets\./i },
-  { id: 'secrets_key', re: /^\s*secrets\s*:/m },
-  { id: 'env_token', re: /^\s*[A-Z0-9_]*(TOKEN|PASSWORD|SECRET|SUPABASE)[A-Z0-9_]*\s*:/m },
-  { id: 'curl', re: /\bcurl\b/i },
-  { id: 'gh_issue_create', re: /\bgh\s+issue\s+create\b/i },
-  { id: 'gh_issue_edit', re: /\bgh\s+issue\s+edit\b/i },
-  { id: 'gh_issue_close', re: /\bgh\s+issue\s+close\b/i },
-  { id: 'delivery_script', re: /syn05-watchdog\/delivery\.ts|\bdelivery\.ts\b/i },
-  { id: 'supabase_db_push', re: /supabase\s+db\s+push/i },
-  { id: 'supabase_functions_deploy', re: /supabase\s+functions\s+deploy/i },
-  { id: 'sql_exec', re: /\bpsql\b|\bmysql\b|supabase\s+db\s+execute/i },
-  { id: 'reusable_workflow', re: /^\s+uses:\s*.*\.ya?ml/m },
-  { id: 'uses_action', re: /^\s+-\s+uses:\s+/m },
-  { id: 'external_url', re: /https?:\/\//i },
-  { id: 'dynamic_steps', re: /\$\{\{\s*toJSON\(|fromJSON\(|steps\.[^}]+\.outputs/i },
-  { id: 'anchor_or_alias', re: /(^|\s)[&*][A-Za-z0-9_-]+/m },
-];
 
 export type InertWorkflowValidation = {
   ok: boolean;
@@ -90,7 +59,6 @@ function stripYamlComments(text: string): string {
   return text
     .split(/\r?\n/)
     .map((line) => {
-      const inSingle = false;
       let out = '';
       let quote: '"' | "'" | null = null;
       for (let i = 0; i < line.length; i++) {
@@ -108,17 +76,15 @@ function stripYamlComments(text: string): string {
         if (ch === '#') break;
         out += ch;
       }
-      void inSingle;
       return out;
     })
     .join('\n');
 }
 
-/** Extract top-level `on` / boolean-true mapping body (YAML 1.1 may treat `on` as true). */
 function extractOnBlock(stripped: string): { found: boolean; body: string; rawKey: string } {
   const lines = stripped.split(/\n/);
   for (let i = 0; i < lines.length; i++) {
-    const m = lines[i].match(/^(on|true)\s*:\s*(.*)$/);
+    const m = lines[i].match(/^("on"|on|true)\s*:\s*(.*)$/);
     if (!m) continue;
     const inline = m[2].trim();
     if (inline === '{}') return { found: true, body: '{}', rawKey: m[1] };
@@ -126,7 +92,7 @@ function extractOnBlock(stripped: string): { found: boolean; body: string; rawKe
       const bodyLines: string[] = [];
       for (let j = i + 1; j < lines.length; j++) {
         const l = lines[j];
-        if (/^[A-Za-z_]/.test(l) || l.startsWith('on:') || l.startsWith('true:')) break;
+        if (/^("on"|on|true|[A-Za-z_])/.test(l) && !/^\s/.test(l)) break;
         if (l.trim() === '') continue;
         bodyLines.push(l);
       }
@@ -135,6 +101,20 @@ function extractOnBlock(stripped: string): { found: boolean; body: string; rawKe
     return { found: true, body: inline, rawKey: m[1] };
   }
   return { found: false, body: '', rawKey: '' };
+}
+
+function jobSection(stripped: string, jobId: string): string {
+  const lines = stripped.split('\n');
+  const start = lines.findIndex((l) => new RegExp(`^\\s{2}${jobId}:\\s*$`).test(l));
+  if (start < 0) return '';
+  const out: string[] = [];
+  for (let i = start + 1; i < lines.length; i++) {
+    const l = lines[i];
+    if (/^\s{2}[A-Za-z0-9_-]+:\s*$/.test(l) && !/^\s{4}/.test(l)) break;
+    if (/^[A-Za-z"]/.test(l)) break;
+    out.push(l);
+  }
+  return out.join('\n');
 }
 
 export function validateInertDeliveryWorkflowContent(content: string): InertWorkflowValidation {
@@ -154,72 +134,125 @@ export function validateInertDeliveryWorkflowContent(content: string): InertWork
     };
   }
 
-  // Reject tab-indent / null bytes / obvious non-YAML
   if (content.includes('\0')) reasons.push('inert_delivery_binary_null');
 
   const stripped = stripYamlComments(content);
 
-  for (const { id, re } of BANNED_CONTENT_PATTERNS) {
-    if (re.test(stripped)) reasons.push(`inert_delivery_banned_${id}`);
-  }
-
-  for (const perm of BANNED_PERMISSION_WRITES) {
-    if (stripped.toLowerCase().includes(perm.replace(/\s+/g, ' ')) || stripped.toLowerCase().includes(perm.replace(/\s+/g, ''))) {
-      reasons.push(`inert_delivery_banned_perm_${perm.replace(/[^a-z]/g, '_')}`);
+  // Must use quoted "on" (empty-run fix) — reject bare on:{}
+  if (/^on:\s*\{\s*\}\s*$/m.test(stripped) || /^on:\s*$/m.test(stripped)) {
+    if (!/^"on":\s*$/m.test(stripped)) {
+      reasons.push('inert_delivery_unquoted_on_empty');
     }
-  }
-  // job-level permissions write
-  if (/^\s+permissions\s*:/m.test(stripped) && /write/i.test(stripped)) {
-    // top-level contents:read is ok; any write is not
-    if (/:\s*write\b/i.test(stripped)) reasons.push('inert_delivery_permission_write');
   }
 
   const onBlock = extractOnBlock(stripped);
   if (!onBlock.found) {
     reasons.push('inert_delivery_on_missing');
-  } else if (onBlock.body.trim() !== '{}') {
-    reasons.push('inert_delivery_on_not_empty');
+  } else {
+    if (onBlock.rawKey !== '"on"' && onBlock.rawKey !== 'on') {
+      // YAML 1.1 true key is unsafe
+      if (onBlock.rawKey === 'true') reasons.push('inert_delivery_on_boolean_coerced');
+    }
+    if (onBlock.rawKey !== '"on"') {
+      reasons.push('inert_delivery_on_must_be_quoted');
+    }
+    if (onBlock.body.trim() === '{}') {
+      reasons.push('inert_delivery_on_empty_map_forbidden');
+    }
     for (const key of BANNED_TRIGGER_KEYS) {
-      const keyRe = new RegExp(`^\\s+${key}\\s*:`, 'm');
-      if (keyRe.test(onBlock.body) || new RegExp(`\\b${key}\\s*:`, 'm').test(onBlock.body)) {
+      if (new RegExp(`^\\s+${key}\\s*:`, 'm').test(onBlock.body)) {
         reasons.push(`inert_delivery_trigger_${key}`);
       }
     }
-    // also scan full stripped for trigger keys nested under on equivalents
-    for (const key of BANNED_TRIGGER_KEYS) {
-      if (new RegExp(`^\\s+${key}\\s*:`, 'm').test(stripped) && onBlock.body.includes(key)) {
-        reasons.push(`inert_delivery_trigger_${key}`);
-      }
+    if (!/^\s+workflow_dispatch\s*:/m.test(onBlock.body)) {
+      reasons.push('inert_delivery_workflow_dispatch_required');
+    }
+    // Only workflow_dispatch allowed under on
+    const triggerKeys = [...onBlock.body.matchAll(/^\s{2}([A-Za-z0-9_]+)\s*:/gm)].map((m) => m[1]);
+    for (const k of triggerKeys) {
+      if (k !== 'workflow_dispatch') reasons.push(`inert_delivery_trigger_${k}`);
     }
   }
 
-  // Require disabled job guard in certified shape
-  if (!/if:\s*\$\{\{\s*false\s*\}\}/.test(stripped) && !/if:\s*false\b/.test(stripped)) {
-    reasons.push('inert_delivery_missing_false_guard');
-  }
-
-  // Must declare contents: read and must not grant issues
-  if (!/permissions:\s*\n\s*contents:\s*read\b/.test(content) && !/contents:\s*read\b/.test(stripped)) {
+  // Top-level permissions: contents read; no top-level issues write
+  if (!/permissions:\s*\n\s*contents:\s*read\b/.test(content)) {
     reasons.push('inert_delivery_contents_read_missing');
   }
-  if (/issues\s*:\s*write/i.test(stripped)) {
-    reasons.push('inert_delivery_issues_write');
+
+  // Split jobs
+  const supervised = jobSection(stripped, 'delivery-supervised');
+  const offJob = jobSection(stripped, 'delivery-off');
+  if (!offJob) reasons.push('inert_delivery_missing_off_job');
+  if (!supervised) reasons.push('inert_delivery_missing_supervised_job');
+
+  // issues:write only inside delivery-supervised
+  const issuesWriteMatches = [...stripped.matchAll(/issues\s*:\s*write/gi)];
+  for (const m of issuesWriteMatches) {
+    const idx = m.index ?? 0;
+    const before = stripped.slice(0, idx);
+    const lastJob = [...before.matchAll(/^\s{2}(delivery-[a-z0-9-]+):/gm)].pop();
+    if (!lastJob || lastJob[1] !== 'delivery-supervised') {
+      reasons.push('inert_delivery_issues_write_outside_supervised');
+    }
   }
 
-  // Malformed: unclosed quotes / odd document start
-  if (/^\s*---\s*$/m.test(stripped) && stripped.split(/^---\s*$/m).length > 3) {
-    reasons.push('inert_delivery_multi_doc');
+  // Banned top-level / global writes
+  if (/^\s{2}contents:\s*write/m.test(stripped) || /^\s{2}actions:\s*write/m.test(stripped)) {
+    reasons.push('inert_delivery_permission_write');
   }
 
-  // Structure independently of digest for reporting; ok requires both.
+  // Secrets / supabase / deploy / curl / gh issue
+  if (/\$\{\{\s*secrets\./i.test(stripped) || /^\s*secrets\s*:/m.test(stripped)) {
+    reasons.push('inert_delivery_banned_secrets');
+  }
+  if (/SUPABASE_|supabase\s+db\s+push|supabase\s+functions\s+deploy/i.test(stripped)) {
+    reasons.push('inert_delivery_banned_supabase');
+  }
+  if (/\bcurl\b/i.test(stripped)) reasons.push('inert_delivery_banned_curl');
+  if (/\bgh\s+issue\s+(create|edit|close)\b/i.test(stripped)) {
+    reasons.push('inert_delivery_banned_gh_issue');
+  }
+  if (/(^|\s)[&*][A-Za-z0-9_-]+/m.test(stripped)) {
+    reasons.push('inert_delivery_banned_anchor_or_alias');
+  }
+
+  // uses: only pinned allowlist
+  const uses = [...stripped.matchAll(/^\s+-\s+uses:\s+(\S+)/gm)].map((m) => m[1]);
+  for (const u of uses) {
+    if (!(ALLOWED_ACTION_USES as readonly string[]).includes(u)) {
+      reasons.push(`inert_delivery_banned_uses_${u.slice(0, 40)}`);
+    }
+  }
+  if (/^\s+uses:\s*.*\.ya?ml/m.test(stripped)) {
+    reasons.push('inert_delivery_banned_reusable_workflow');
+  }
+
+  // CLI must be the supervised oneshot entry, not generic delivery.ts as a shell script side channel
+  if (/syn05-watchdog\/delivery\.ts\b/.test(stripped) && !/supervised-delivery-cli\.ts/.test(stripped)) {
+    reasons.push('inert_delivery_banned_delivery_script');
+  }
+  if (supervised && !/supervised-delivery-cli\.ts/.test(supervised)) {
+    reasons.push('inert_delivery_supervised_cli_missing');
+  }
+
+  // Inputs required
+  if (!/c3_b5_mode/.test(stripped) || !/c3_b5_confirm/.test(stripped)) {
+    reasons.push('inert_delivery_missing_oneshot_inputs');
+  }
+  if (!/C3-B\.5-ONESHOT/.test(content)) {
+    reasons.push('inert_delivery_missing_oneshot_token');
+  }
+
+  // No schedule strings
+  if (/cron\s*:/i.test(stripped)) reasons.push('inert_delivery_trigger_schedule');
+
   const structure_ok = !reasons.some(
     (r) => r !== 'inert_delivery_digest_mismatch' && r.startsWith('inert_delivery_'),
   );
 
-  const uniqueReasons = [...new Set(reasons)];
   return {
     ok: digest_ok && structure_ok,
-    reasons: uniqueReasons,
+    reasons: [...new Set(reasons)],
     sha256: sha,
     path_ok: true,
     digest_ok,
@@ -252,6 +285,5 @@ export function readAndValidateInertDeliveryWorkflow(
       structure_ok: false,
     };
   }
-  const content = readFileSync(abs, 'utf8');
-  return validateInertDeliveryWorkflowContent(content);
+  return validateInertDeliveryWorkflowContent(readFileSync(abs, 'utf8'));
 }
