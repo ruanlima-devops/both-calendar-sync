@@ -28,14 +28,15 @@ export type GithubHttpResponse = {
 export type GithubHttpTransport = (req: GithubHttpRequest) => Promise<GithubHttpResponse>;
 
 export class GithubHttpError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-    readonly retryAfterMs?: number,
-    readonly code?: string,
-  ) {
+  readonly status: number;
+  readonly retryAfterMs?: number;
+  readonly code?: string;
+  constructor(message: string, status: number, retryAfterMs?: number, code?: string) {
     super(redactText(message, 200));
     this.name = 'GithubHttpError';
+    this.status = status;
+    this.retryAfterMs = retryAfterMs;
+    this.code = code;
   }
 }
 
