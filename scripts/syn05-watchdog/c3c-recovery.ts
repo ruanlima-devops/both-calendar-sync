@@ -134,6 +134,17 @@ export function createC3CPorts(token: string): C3CPorts {
 }
 
 export async function findC3COpenIssue(issues: GithubIssuesPort): Promise<IncidentRecord | null> {
+  // Prefer fingerprint lookup (less sensitive to label-index lag right after create).
+  if (issues.findOpenByFingerprint) {
+    const hit = await issues.findOpenByFingerprint(C3_C_FINGERPRINT);
+    if (hit) {
+      if (hit.number === C3_C_FORBIDDEN_ISSUE) throw new Error('forbidden_issue_26');
+      const hydrated = hydrateIncidentFromBody(hit);
+      if (hydrated.fingerprint === C3_C_FINGERPRINT && isC3CSyntheticIssue(hydrated)) {
+        return hydrated;
+      }
+    }
+  }
   const incidents = await issues.listBotIncidents('open');
   const matches = incidents
     .map(hydrateIncidentFromBody)
@@ -220,13 +231,19 @@ export async function runC3CPhase(opts: {
       /* findClosed optional / incomplete → fail closed below via create path */
     }
 
-    const { actions } = await reconcileIncidents(opts.ports.issues, [ev], {
+    const { actions, incidents } = await reconcileIncidents(opts.ports.issues, [ev], {
       dryRun: false,
       healthyToResolve: 2,
       nowIso: new Date().toISOString(),
     });
     const created = actions.find((a) => a.type === 'create' || a.type === 'update');
-    const after = await findC3COpenIssue(opts.ports.issues);
+    // Prefer reconcile canonical result; fall back to re-search (label index may lag).
+    let after =
+      incidents.find((i) => i.fingerprint === C3_C_FINGERPRINT && i.state === 'open') ?? null;
+    if (after) after = hydrateIncidentFromBody(after);
+    if (!after || !isC3CSyntheticIssue(after)) {
+      after = await findC3COpenIssue(opts.ports.issues);
+    }
     if (!after) {
       return { ...base, code: 'firing_issue_missing_after_write', post_attempts: 1 };
     }
