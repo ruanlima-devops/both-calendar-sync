@@ -2,11 +2,13 @@
 
 **Data (UTC):** 2026-11-22  
 **Repositório:** `ruanlima-devops/both-calendar-sync`  
-**Base certificada (SHA lock):** `9c6666d897db927d8378fca8498591e240e31d8d`  
-**Branch:** `fix/sec-07-sync-calendar-tombstone-source`  
+**Base certificada (SHA lock pré-merge):** `9c6666d897db927d8378fca8498591e240e31d8d`  
+**Merge SHA:** `90187289dcf945969894858fd70a96741520d532`  
+**PR:** [#36](https://github.com/ruanlima-devops/both-calendar-sync/pull/36) **MERGED**  
+**Branch de correção:** `fix/sec-07-sync-calendar-tombstone-source` @ `b7d637542ad427ec560bae7592861be05950399f`  
 **Worktree:** `/Users/ruan/Documents/work12-sec07-source-integrity`  
 **STAGE:** `qszggrrjhcwltnmxpxcy`  
-**Deploy nesta autorização:** **NÃO executado**
+**Deploy nesta autorização:** **NÃO executado** (job Supabase STAGE **SKIPPED**)
 
 ---
 
@@ -23,16 +25,16 @@ Fora de escopo (não executado): Supabase functions deploy, db push, SQL remoto,
 | # | Checagem | Resultado |
 |---|----------|-----------|
 | 1 | Origin/repo `ruanlima-devops/both-calendar-sync` | PASS |
-| 2 | `origin/develop` == `9c6666d897db927d8378fca8498591e240e31d8d` | PASS |
-| 3 | PR #15 OPEN HEAD `78979549cad61438de751584a0ad895855781b8b` | PASS (intacto) |
-| 4 | Worktrees Both preservadas; nova worktree ausente antes da criação | PASS |
+| 2 | `origin/develop` == `9c6666d…` (pré-merge) | PASS |
+| 3 | PR #15 OPEN HEAD `78979549cad61438de751584a0ad895855781b8b` | PASS (intacto pré e pós) |
+| 4 | Worktrees Both preservadas; nova worktree criada de forma não destrutiva | PASS |
 | 5 | Espaço livre suficiente | PASS |
 | 6 | Sem rebase/reset automático; sem operações Git destrutivas | PASS |
 | 7 | Deploy Safety scripts presentes (`classify` + `assert`) | PASS |
 | 8 | `assertSec07TombstonePresent` localizado | PASS |
 | 9 | Source `supabase/functions/sync-calendar/index.ts` localizado | PASS |
-| 10 | Docs/testes SEC-07 localizados (`STG-07-SEC-07-REMEDIATION.md`, legacy test) | PASS |
-| 11 | Contrato histórico tombstone recuperado (dirty local PR #15 / remediação 2026-11-17) | PASS |
+| 10 | Docs/testes SEC-07 localizados | PASS |
+| 11 | Contrato histórico tombstone recuperado (remediação 2026-11-17 + dirty PR #15) | PASS |
 | 12 | Inventário STAGE PRE read-only (24 functions; sync-calendar v22) | PASS |
 
 **SEC07_PREFLIGHT:** **PASS**
@@ -42,11 +44,11 @@ Fora de escopo (não executado): Supabase functions deploy, db push, SQL remoto,
 ## C. SHA lock
 
 ```
-origin/develop = 9c6666d897db927d8378fca8498591e240e31d8d
-worktree HEAD  = 9c6666d897db927d8378fca8498591e240e31d8d (pré-commit)
+pré-merge origin/develop = 9c6666d897db927d8378fca8498591e240e31d8d
+pós-merge origin/develop = 90187289dcf945969894858fd70a96741520d532
 ```
 
-Sem drift. Sem rebase.
+Sem rebase. Merge commit padrão de PR #36.
 
 ---
 
@@ -55,14 +57,11 @@ Sem drift. Sem rebase.
 | Evidência | Detalhe |
 |-----------|---------|
 | Remediação certificada | `docs/STG-07-SEC-07-REMEDIATION.md` (2026-11-17) |
-| Deploy remoto histórico | `sync-calendar` v20 (`verify_jwt=false`, legado vulnerável) → v21 tombstone → v22 (STAGE atual) |
-| Contrato HTTP | **410** + corpo `SYNC_CALENDAR_DEPRECATED` / `SYNC_CALENDAR_GONE` |
-| Handler | `handleLegacySyncCalendar` em `_shared/sync/sync-calendar-legacy.ts` |
-| Entrypoint | `Deno.serve((req) => handle(req, handleLegacySyncCalendar))` |
-| Config | `verify_jwt = true` sob `[functions.sync-calendar]` |
-| Integração em `develop` | **Ausente** — tombstone existia apenas como dirty local em worktree PR #15 + STAGE remoto |
-
-O tombstone **nunca foi commitado** em `develop`. Por isso `assertSec07TombstonePresent` falhava no tip certificado apesar do remoto já estar tombstonado.
+| Deploy remoto histórico | v20 legado → v21 tombstone → **v22** (STAGE atual, inalterado) |
+| Contrato HTTP | **410** + `SYNC_CALENDAR_DEPRECATED` / `SYNC_CALENDAR_GONE` |
+| Handler | `handleLegacySyncCalendar` |
+| Config | `verify_jwt = true` |
+| Integração prévia em `develop` | **Ausente** — só dirty local + remoto |
 
 **SEC07_HISTORICAL_CONTRACT:** **PASS**
 
@@ -70,53 +69,53 @@ O tombstone **nunca foi commitado** em `develop`. Por isso `assertSec07Tombstone
 
 ## E. Root cause
 
-1. `develop` tip (`9c6666d`) ainda continha o runtime legado (`processSyncJob` / `enqueueSync` / `syncConnectedCalendar` / `adminClient`).
-2. `supabase/config.toml` em develop: `verify_jwt = false` para `sync-calendar` (regressão vs STAGE v22 `true`).
-3. Artefatos certificados (`sync-calendar-legacy.ts` + testes) estavam **untracked** na worktree de PR #15, nunca integrados.
-4. STAGE permanece v22 tombstone — divergência source↔remoto, não falha de deploy STAGE atual.
+1. `develop` tip (`9c6666d`) ainda continha runtime legado (`processSyncJob` / `enqueueSync` / `syncConnectedCalendar` / `adminClient`).
+2. `config.toml` em develop: `verify_jwt = false` (regressão vs STAGE v22 `true`).
+3. Artefatos certificados (`sync-calendar-legacy.ts` + testes) estavam **untracked** na worktree de PR #15.
+4. STAGE já era v22 tombstone — divergência **source↔remoto**, não falha do remoto atual.
 
 **SEC07_ROOT_CAUSE:** **IDENTIFIED**
 
 ---
 
-## F. Contrato de segurança (restaurado)
+## F. Contrato de segurança (restaurado em develop)
 
 Fail-closed idêntico ao certificado em 2026-11-17:
 
-- Sem sincronização / eventos / tokens OAuth / DB / `service_role` / Google / Microsoft Graph / writes / migrations / jobs.
-- Sem import do engine de sync legado no entrypoint.
-- Sem bypass por headers/query/body (`jobId`, `calendarId`, `reconcile`, `user_id`).
-- Resposta inerte: **410** + `SYNC_CALENDAR_GONE` (`error=GONE`, `code=SYNC_CALENDAR_DEPRECATED`, `use.userSync=sync-now`, `use.internalReconcile=reconcile-sync`).
-- Body drenado e ignorado.
+- Sem sync / eventos / OAuth tokens / DB / `service_role` / Google / Microsoft Graph / writes / migrations / jobs.
+- Sem import do engine legado no entrypoint.
+- Sem bypass por headers/query/body.
+- Resposta: **410** + `SYNC_CALENDAR_GONE`.
 
-**SEC07_SOURCE_TOMBSTONE:** **PASS** (source local pós-correção)  
+**SEC07_SOURCE_TOMBSTONE:** **PASS**  
 **SEC07_NO_LEGACY_SYNC:** **PASS**
 
 ---
 
 ## G. Investigação `verify_jwt`
 
-| Camada | Valor | Avaliação |
-|--------|-------|-----------|
-| STAGE remoto v22 | `verify_jwt=true` | Alinhado ao contrato SEC-07 |
-| `develop` pré-fix | `verify_jwt=false` | Regressão de source vs remoto |
-| Source pós-fix | `verify_jwt=true` | Restaurado |
-| Papel no contrato | Defense-in-depth no gateway; handler é inerte mesmo se alcançado | Confirmado em remediação (POST só apikey → 410; JWT inválido → 401 gateway) |
-| Alteração automática isolada? | **Não** — corrigido junto do tombstone porque o assert SEC-07 exige `verify_jwt=true` e o remoto já está `true` | |
+| Camada | Valor |
+|--------|-------|
+| STAGE remoto v22 | `true` (inalterado PRE=POST) |
+| develop pré-fix | `false` (regressão) |
+| develop pós-merge | `true` |
+| Papel | Defense-in-depth; handler permanece inerte |
 
-**SEC07_VERIFY_JWT_REVIEW:** **PASS** (não é proteção exclusiva; tombstone + JWT)
+Não alterado isoladamente; restaurado com o tombstone porque o assert SEC-07 exige `verify_jwt=true` e o remoto já estava `true`.
+
+**SEC07_VERIFY_JWT_REVIEW:** **PASS**
 
 ---
 
-## H. Alterações de código
+## H. Alterações de código (PR #36)
 
 | Arquivo | Ação |
 |---------|------|
-| `supabase/functions/sync-calendar/index.ts` | Substituído runtime legado por tombstone SEC-07 |
-| `supabase/functions/_shared/sync/sync-calendar-legacy.ts` | Adicionado (handler 410) |
-| `supabase/functions/_shared/sync/sync-calendar-legacy.test.ts` | Adicionado (17 testes negativos/contratos) |
-| `supabase/config.toml` | `verify_jwt = true` + comentário SEC-07 |
-| `docs/STG-07-SEC-07-SOURCE-INTEGRITY-E2E.md` | Este relatório |
+| `supabase/functions/sync-calendar/index.ts` | Tombstone SEC-07 |
+| `supabase/functions/_shared/sync/sync-calendar-legacy.ts` | Handler 410 |
+| `supabase/functions/_shared/sync/sync-calendar-legacy.test.ts` | 17 testes |
+| `supabase/config.toml` | `verify_jwt = true` |
+| `docs/STG-07-SEC-07-SOURCE-INTEGRITY-E2E.md` | Relatório E2E |
 
 Não alterados: outras Edge Functions, migrations, `deploy-stage.yml`, PR #15, secrets.
 
@@ -124,18 +123,9 @@ Não alterados: outras Edge Functions, migrations, `deploy-stage.yml`, PR #15, s
 
 ## I. Testes negativos (offline)
 
-Suite `sync-calendar-legacy.test.ts` — **17 PASS**, cobrindo:
-
-- 410 anônimo / JWT inválido / JWT expirado-looking  
-- recusa calendarId próprio/alheio, jobId, reconcile/cron  
-- ignore `user_id` spoof  
-- ausência de side effects  
-- contratos de source (sem `processSyncJob` no entrypoint; `verify_jwt=true`; app usa `sync-now`)
-
-Assert Deploy Safety:
-
-- tip com tombstone → `{"ok":true,"reason":"sec07_tombstone_ok"}`  
-- fixtures T23/T24 (legado / `verify_jwt=false`) → FAIL esperado (suite Deploy Safety)
+- Suite legacy: **17 PASS**
+- Assert tip develop: `{"ok":true,"reason":"sec07_tombstone_ok"}`
+- Fixtures Deploy Safety T23/T24 (legado / jwt false): FAIL esperado
 
 **SEC07_ASSERTION:** **PASS**  
 **SEC07_OFFLINE_TESTS:** **PASS**
@@ -148,8 +138,8 @@ Assert Deploy Safety:
 |-------|-----------|
 | Watchdog | **217 PASS** |
 | Deploy Safety | **90 PASS** |
-| Vitest default (incl. SEC-07) | **429 PASS** |
-| TypeScript (`tsc --noEmit`) | **PASS** |
+| Vitest default | **429 PASS** |
+| TypeScript | **PASS** |
 
 **SEC07_TYPECHECK:** **PASS**
 
@@ -162,14 +152,13 @@ Classificação do changeset:
 ```json
 {
   "decision": "DEPLOY_CANDIDATE_FUNCTIONS",
-  "reasons": ["functions_or_shared_or_config"],
-  "may_skip_remote_deploy": false,
   "run_db": false,
-  "run_functions": true
+  "run_functions": true,
+  "may_skip_remote_deploy": false
 }
 ```
 
-Assert com release gate OFF (`DEPLOY_SAFETY_ALLOW_CANDIDATE` **ausente** em repo vars e env `staging`):
+Assert com release gate OFF (`DEPLOY_SAFETY_ALLOW_CANDIDATE` vazio no Actions run):
 
 ```json
 {
@@ -177,62 +166,68 @@ Assert com release gate OFF (`DEPLOY_SAFETY_ALLOW_CANDIDATE` **ausente** em repo
   "decision": "DEPLOY_CANDIDATE_FUNCTIONS",
   "run_db": false,
   "run_functions": false,
-  "skip_remote": false,
   "reason": "candidate_blocked_until_release_gate"
 }
 ```
 
-Prova de não-deploy:
+Prova Actions pós-merge (run `44978220228`):
 
-- `vars.DEPLOY_SAFETY_ALLOW_CANDIDATE` não existe (repo `total_count=0`; staging só `SUPABASE_PROJECT_REF` + `STAGE_WEB_ORIGIN`).
-- Job `Supabase STAGE` só roda se `run_functions==true` ou `run_db==true`.
-- Job `Record SAFE_SKIP / fail-closed` documenta explicitamente: *DEPLOY_CANDIDATE without release gate = blocked*.
-- Classificador **não** foi alterado para `SAFE_SKIP` artificial.
+- `DEPLOY_SAFETY_ALLOW_CANDIDATE:` (vazio)
+- Classify → `DEPLOY_CANDIDATE_FUNCTIONS`
+- Assert → `run_functions=false`
+- Job **Supabase STAGE** → **skipped**
+- Job **Record SAFE_SKIP / fail-closed** → **success**
+- Sem `supabase functions deploy` / sem `db push`
 
-**SEC07_DEPLOY_SAFETY:** **PASS** (candidate bloqueado pelo release gate; sem bypass)
+Classificador **não** foi alterado para forçar `SAFE_SKIP`.
+
+**SEC07_DEPLOY_SAFETY:** **PASS**  
+**SEC07_NO_REMOTE_DEPLOY:** **PASS**
 
 ---
 
 ## L. Commit / PR / CI
 
-*(preenchido operacionalmente na execução)*
+| Item | Valor |
+|------|-------|
+| Commit fix | `b7d637542ad427ec560bae7592861be05950399f` |
+| PR | [#36](https://github.com/ruanlima-devops/both-calendar-sync/pull/36) |
+| Required checks | `Application` SUCCESS · `Supabase` SUCCESS |
+| CI develop push | run `44978220358` SUCCESS |
+| Nota | Check não-required `Workers Builds: both-calendar-sync-stage` FAILURE no PR (Cloudflare); **não** está em branch protection |
 
-- Commit: ver git log da branch  
-- PR: Draft → undraft condicional  
-- Required checks develop: `Application`, `Supabase`  
-- CI: ver seção M/N
-
-**SEC07_CI:** ver atualização pós-CI
+**SEC07_CI:** **PASS**
 
 ---
 
 ## M. Merge
 
-Merge **somente** com:
+| Campo | Valor |
+|-------|-------|
+| Undraft | sim (após required checks + prova no-deploy) |
+| Merge | `90187289dcf945969894858fd70a96741520d532` @ 2026-11-22T02:54:41Z |
+| Base pré-merge | `9c6666d…` (sem drift) |
+| Release gate | OFF reconfirmado |
+| PR #15 | intacto |
 
-1. Required checks PASS  
-2. Reconfirmação `DEPLOY_SAFETY_ALLOW_CANDIDATE` ≠ `1`  
-3. PR #15 intacto  
-4. develop tip ainda no SHA lock pré-merge (ou fast-forward limpo)
-
-Se qualquer condição falhar → Draft preservado / STOP.
+**SEC07_MERGE:** **PASS**
 
 ---
 
 ## N. Actions pós-merge
 
-Esperado no push `develop`:
+| Workflow | Run | Resultado |
+|----------|-----|-----------|
+| Deploy STAGE | [44978220228](https://github.com/ruanlima-devops/both-calendar-sync/actions/runs/44978220228) | success · Supabase STAGE **SKIPPED** |
+| CI | [44978220358](https://github.com/ruanlima-devops/both-calendar-sync/actions/runs/44978220358) | success |
 
-- Classify → `DEPLOY_CANDIDATE_FUNCTIONS`  
-- Assert → `run_functions=false` / `candidate_blocked_until_release_gate`  
-- Job `Supabase STAGE` → **SKIPPED**  
-- Sem `supabase functions deploy` / `db push`
+Nenhum outro workflow de deploy Supabase executado no SHA de merge.
 
 ---
 
 ## O. STAGE PRE / POST
 
-### PRE (read-only)
+### PRE = POST (ALL_IDENTICAL)
 
 | Function | Version | verify_jwt | ezbr_sha256 (prefix) | id |
 |----------|---------|------------|----------------------|----|
@@ -242,29 +237,29 @@ Esperado no push `develop`:
 | billing-webhook | 14 | false | `cf8c07f4755f8681` | `a485a2e6-fdb3-43db-bb16-ec5006ccde29` |
 | microsoft-oauth | 23 | false | `93a2c71d00d52c5e` | `41df2dee-91f5-4863-bf0e-edef3610a9a0` |
 
-TOTAL functions: **24**
+TOTAL functions: **24** (todas as 24 IDs/versões/sha idênticos PRE↔POST)
 
-### POST
-
-*(preencher após merge — deve ser idêntico ao PRE)*
+**SEC07_STAGE_PRE_POST:** **PASS**
 
 ---
 
-## P. Estado final do source
+## P. Estado final do source (`origin/develop`)
 
-Entrypoint develop (pós-integração esperada):
+```ts
+import { handle } from '../_shared/function.ts';
+import { handleLegacySyncCalendar } from '../_shared/sync/sync-calendar-legacy.ts';
+// SEC-07: legacy endpoint retired. Deployed surface returns 410 Gone.
+Deno.serve((req) => handle(req, handleLegacySyncCalendar));
+```
 
-- Contém `handleLegacySyncCalendar` / SEC-07  
-- Não contém `processSyncJob` / `syncConnectedCalendar` / `enqueueSync`  
-- `assertSec07TombstonePresent` → ok  
-- `verify_jwt = true`
+`assertSec07TombstonePresent(develop tip)` → `sec07_tombstone_ok`
 
 ---
 
 ## Q. Estado remoto
 
-**SEC07_REMOTE_STAGE:** **UNCHANGED** (objetivo; confirmado POST)  
-Nenhum deploy nesta autorização.
+**SEC07_REMOTE_STAGE:** **UNCHANGED**  
+sync-calendar permanece **v22** / `verify_jwt=true` / mesmo deployment id e sha.
 
 ---
 
@@ -276,41 +271,42 @@ OPEN · HEAD `78979549cad61438de751584a0ad895855781b8b` · **não alterado**.
 
 ## S. Riscos residuais
 
-1. Se PO ativar `DEPLOY_SAFETY_ALLOW_CANDIDATE=1` no futuro, um push com functions mudadas faria deploy — **intencional** (Gate D). Com tombstone no tip, SEC-07 veto adicional protege republicação de legado.  
-2. Worktree PR #15 ainda tem dirty local histórico — não tocado.  
-3. `supabase functions deploy` sem path filter publicaria **todas** as functions se o gate for ligado — risco operacional residual, fora deste escopo.
+1. Ativar `DEPLOY_SAFETY_ALLOW_CANDIDATE=1` no futuro autorizaria deploy de candidates — requer Gate D explícito. Com tombstone no tip, veto SEC-07 adicional bloqueia republicação de legado.
+2. Worktree PR #15 ainda pode ter dirty local histórico — não tocado.
+3. Check Cloudflare Workers Builds falhou no PR #36 (não-required); fora do escopo Supabase Edge.
 
 ---
 
-## T. Gates finais (matriz)
+## T. Gates finais
 
 | Gate | Status |
 |------|--------|
-| SEC07_PREFLIGHT | PASS |
-| SEC07_HISTORICAL_CONTRACT | PASS |
-| SEC07_ROOT_CAUSE | IDENTIFIED |
-| SEC07_SOURCE_TOMBSTONE | PASS |
-| SEC07_NO_LEGACY_SYNC | PASS |
-| SEC07_ASSERTION | PASS |
-| SEC07_VERIFY_JWT_REVIEW | PASS |
-| SEC07_OFFLINE_TESTS | PASS |
-| SEC07_TYPECHECK | PASS |
-| SEC07_DEPLOY_SAFETY | PASS |
-| SEC07_CI | PENDING |
-| SEC07_MERGE | PENDING |
-| SEC07_NO_REMOTE_DEPLOY | PENDING (prova de gate OFF = PASS local) |
-| SEC07_STAGE_PRE_POST | PRE PASS / POST PENDING |
-| SEC07_SOURCE_INTEGRITY_CERTIFIED | PENDING integração develop |
-| SEC07_REMOTE_STAGE | UNCHANGED |
-| WATCHDOG_REMOTE_ENABLED | NO |
-| SYN-05 | NO-GO |
-| STG-07 | NO-GO |
-| PROD | NO-GO |
+| SEC07_PREFLIGHT | **PASS** |
+| SEC07_HISTORICAL_CONTRACT | **PASS** |
+| SEC07_ROOT_CAUSE | **IDENTIFIED** |
+| SEC07_SOURCE_TOMBSTONE | **PASS** |
+| SEC07_NO_LEGACY_SYNC | **PASS** |
+| SEC07_ASSERTION | **PASS** |
+| SEC07_VERIFY_JWT_REVIEW | **PASS** |
+| SEC07_OFFLINE_TESTS | **PASS** |
+| SEC07_TYPECHECK | **PASS** |
+| SEC07_DEPLOY_SAFETY | **PASS** |
+| SEC07_CI | **PASS** |
+| SEC07_MERGE | **PASS** |
+| SEC07_NO_REMOTE_DEPLOY | **PASS** |
+| SEC07_STAGE_PRE_POST | **PASS** |
+| SEC07_SOURCE_INTEGRITY_CERTIFIED | **PASS** |
+| SEC07_REMOTE_STAGE | **UNCHANGED** |
+| WATCHDOG_REMOTE_ENABLED | **NO** |
+| SYN-05 | **NO-GO** |
+| STG-07 | **NO-GO** |
+| PROD | **NO-GO** |
 
 ---
 
 ## U. Próxima decisão PO
 
-1. Se merge + Actions confirmarem SKIPPED deploy e STAGE idêntico → **SEC07_SOURCE_INTEGRITY_CERTIFIED=PASS**.  
-2. Não habilitar `DEPLOY_SAFETY_ALLOW_CANDIDATE` sem autorização Gate D explícita.  
-3. SYN-05 / STG-07 / PROD permanecem **NO-GO**.
+1. Source SEC-07 está integrado em `develop` e protegido pelo assert + release gate.  
+2. **Não** habilitar `DEPLOY_SAFETY_ALLOW_CANDIDATE` sem autorização Gate D.  
+3. SYN-05 / STG-07 / PROD permanecem **NO-GO**.  
+4. PR #15 permanece OPEN/intocável sob esta autorização.
