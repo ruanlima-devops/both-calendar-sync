@@ -372,7 +372,7 @@ export async function evaluateIndependentObserver(input: ObserverEvalInput): Pro
   return { payload, alert_channel_active: false, http_performed };
 }
 
-/** Future alert channel — always inactive in C3-E. */
+/** Future alert channel — always inactive (OF-02 gate OFF). */
 export function dispatchObserverAlert(_payload: ObserverPayloadV1): { sent: false; code: string } {
   return { sent: false, code: 'observer_alert_channel_not_authorized' };
 }
@@ -382,5 +382,8 @@ export const OBSERVER_INDEPENDENCE = {
   same_actions_platform: 'shared_dependency_documented',
   issues_as_sole_evidence: 'forbidden',
   absence_of_signal_is_healthy: false,
-  recommended_external: 'uptime_or_second_org_actions_ro',
+  /** Prefer OF-01 external StatusSource runtime — not another Actions job in same org. */
+  recommended_external: 'cloud_scheduler_runtime_with_status_source',
+  of01_foundation: 'scripts/syn05-watchdog/external-observer-foundation.ts',
+  of02_alert_channel: 'scripts/syn05-watchdog/alert-channel.ts',
 } as const;
