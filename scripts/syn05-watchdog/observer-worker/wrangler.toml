@@ -5,13 +5,14 @@
 name = "both-stage-syn05-observer"
 main = "../cloudflare-scheduled-adapter.ts"
 compatibility_date = "2026-11-01"
+workers_dev = false
+preview_urls = false
 
 # Kill switch: empty crons = no scheduled invocations
 [triggers]
 crons = []
 
 # No routes / custom domains configured here.
-# workers.dev: leave disabled in dashboard if account allows.
 
 [vars]
 OBSERVER_AUTHORIZATION_GATE = "OFF"
