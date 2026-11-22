@@ -200,16 +200,22 @@ Assert: `safe_skip` · release gate OFF.
 
 ## P. PR / CI / merge
 
-*(preenchido na publicação)*
+| Item | Valor |
+|------|-------|
+| Commit | `6ef20df96eb16a5a9e88e0bcc5e5be737073650e` |
+| PR | [#38](https://github.com/ruanlima-devops/both-calendar-sync/pull/38) MERGED |
+| Required checks | Application SUCCESS · Supabase SUCCESS |
+| Merge SHA | `377331cbae5ff00063bb534f718ced0155e6196c` |
+| Deploy STAGE | [44979699104](https://github.com/ruanlima-devops/both-calendar-sync/actions/runs/44979699104) · **SAFE_SKIP** · Supabase STAGE **SKIPPED** |
 
-- PR Draft → CI Application/Supabase → undraft/merge se SAFE_SKIP confirmado.
-- Pós-merge: Deploy STAGE deve SKIPPED.
+**OF_PR_CI:** **PASS**  
+**OF_MERGE:** **PASS**
 
 ---
 
 ## Q. STAGE PRE / POST
 
-### PRE (read-only)
+### PRE = POST (CRITICAL_IDENTICAL)
 
 | Function | Version | verify_jwt | id |
 |----------|---------|------------|-----|
@@ -219,17 +225,15 @@ Assert: `safe_skip` · release gate OFF.
 | billing-webhook | 14 | false | `a485a2e6-fdb3-43db-bb16-ec5006ccde29` |
 | microsoft-oauth | 23 | false | `41df2dee-91f5-4863-bf0e-edef3610a9a0` |
 
-TOTAL: **24** functions.
+TOTAL: **24** functions · deployment IDs / ezbr_sha256 críticos idênticos.
 
-### POST
-
-*(após merge — deve ser idêntico)*
+**OF_STAGE_PRE_POST:** **PASS**
 
 ---
 
 ## R. Final develop SHA
 
-*(após merge)*
+`377331cbae5ff00063bb534f718ced0155e6196c` (merge #38; tip pode avançar com docs-cert follow-up)
 
 ---
 
@@ -254,8 +258,8 @@ Preservados: #15 OPEN `78979549…`; #26 OPEN; #30 CLOSED. Sem mutação.
 
 ## U. Activation readiness verdict
 
-**OPERATIONAL_FOUNDATIONS_IMPLEMENTATION_CERTIFIED:** **PASS** (se merge SAFE_SKIP + STAGE idêntico)  
-**READY_FOR_ACTIVATION:** **CONDITIONAL** / efetivamente **NO** para go-live  
+**OPERATIONAL_FOUNDATIONS_IMPLEMENTATION_CERTIFIED:** **PASS**  
+**READY_FOR_ACTIVATION:** **CONDITIONAL** (implementação offline certificada; ativação live **NO**)  
 (observador, credencial e canal externos **não** ativados)
 
 | Flag | Valor |
