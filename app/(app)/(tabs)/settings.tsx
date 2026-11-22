@@ -389,6 +389,19 @@ export default function AccountScreen() {
       </Card>
 
       <Card>
+        <Typography variant="sectionTitle">Senha</Typography>
+        <Typography variant="body" muted>
+          Altere a senha desta conta Both. Contas criadas só com Google também podem definir uma
+          senha aqui (sem transferir dados entre usuários).
+        </Typography>
+        <Button
+          label="Alterar senha"
+          variant="secondary"
+          onPress={() => router.push('/auth/update-password' as Href)}
+        />
+      </Card>
+
+      <Card>
         <Typography variant="sectionTitle">Sessão</Typography>
         <Typography variant="caption" muted>
           Conta conectada via {session?.user.app_metadata.provider ?? 'email'}

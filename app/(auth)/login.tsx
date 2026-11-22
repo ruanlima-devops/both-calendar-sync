@@ -3,12 +3,16 @@ import { StyleSheet, Text, View } from 'react-native';
 import { type Href, useRouter } from 'expo-router';
 import { AppleSignInButton } from '@/components/auth/AppleSignInButton';
 import { AuthFooter } from '@/components/auth/AuthFooter';
+import { AuthPasswordField } from '@/components/auth/AuthPasswordField';
+import { AuthPrimaryButton } from '@/components/auth/AuthPrimaryButton';
 import { AuthShell } from '@/components/auth/AuthShell';
+import { AuthTextField } from '@/components/auth/AuthTextField';
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton';
 import { BothLogo } from '@/components/brand/BothLogo';
 import { useGoogleAuth } from '@/hooks/useGoogleAuth';
 import { usePreferredColorScheme } from '@/hooks/usePreferredColorScheme';
 import { isAppleAuthAvailable, signInWithApple } from '@/lib/auth/apple';
+import { signInWithEmailPassword } from '@/lib/auth/email-password';
 import { userMessageForAuthError } from '@/lib/auth/errors';
 import { schemeTokens, space, type } from '@/lib/theme';
 
@@ -19,15 +23,20 @@ export default function LoginScreen() {
   const [appleAvailable, setAppleAvailable] = useState(false);
   const [appleBusy, setAppleBusy] = useState(false);
   const [appleError, setAppleError] = useState<string | null>(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
 
   useEffect(() => {
     void isAppleAuthAvailable().then(setAppleAvailable);
   }, []);
 
   async function onApple() {
-    if (appleBusy || googleBusy) return;
+    if (appleBusy || googleBusy || passwordBusy) return;
     setAppleBusy(true);
     setAppleError(null);
+    setPasswordError(null);
     try {
       const result = await signInWithApple();
       if (result.status === 'error') setAppleError(result.message);
@@ -38,8 +47,24 @@ export default function LoginScreen() {
     }
   }
 
-  const busy = googleBusy || appleBusy;
-  const error = appleError ?? googleError;
+  async function onPasswordLogin() {
+    if (passwordBusy || googleBusy || appleBusy) return;
+    setPasswordBusy(true);
+    setPasswordError(null);
+    setAppleError(null);
+    try {
+      const result = await signInWithEmailPassword({ email, password });
+      if (result.status === 'validation' || result.status === 'error') {
+        setPasswordError(result.message);
+      }
+      // success → SessionProvider + auth layout redirect
+    } finally {
+      setPasswordBusy(false);
+    }
+  }
+
+  const busy = googleBusy || appleBusy || passwordBusy;
+  const error = passwordError ?? appleError ?? googleError;
 
   return (
     <AuthShell colors={colors} footer={<AuthFooter colors={colors} />}>
@@ -58,10 +83,43 @@ export default function LoginScreen() {
       </View>
 
       <View style={styles.actions}>
-        {appleAvailable ? (
-          <AppleSignInButton dark={colors.bg === '#0b1220' || colors.bg.startsWith('#0')} busy={busy} onPress={() => void onApple()} />
-        ) : null}
-        <GoogleSignInButton colors={colors} busy={busy} onPress={() => void signIn()} />
+        <AuthTextField
+          colors={colors}
+          label="E-mail"
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+          autoComplete="email"
+          textContentType="emailAddress"
+          placeholder="voce@email.com"
+          editable={!busy}
+          testID="login-email"
+        />
+        <AuthPasswordField
+          colors={colors}
+          label="Senha"
+          value={password}
+          onChangeText={setPassword}
+          autoComplete="current-password"
+          testID="login-password"
+        />
+        <Text
+          onPress={() => router.push('/(auth)/forgot-password' as Href)}
+          style={[styles.forgot, { color: colors.primary }]}
+          accessibilityRole="link"
+          accessibilityLabel="Esqueci minha senha"
+        >
+          Esqueci minha senha
+        </Text>
+        <AuthPrimaryButton
+          colors={colors}
+          label="Entrar"
+          onPress={() => void onPasswordLogin()}
+          loading={passwordBusy}
+          disabled={busy && !passwordBusy}
+          testID="login-submit"
+        />
+
         {error ? (
           <Text
             style={[styles.error, { color: colors.danger, backgroundColor: colors.dangerMuted }]}
@@ -77,6 +135,15 @@ export default function LoginScreen() {
           <Text style={[styles.or, { color: colors.muted }]}>ou</Text>
           <View style={[styles.rule, { backgroundColor: colors.hairline }]} />
         </View>
+
+        {appleAvailable ? (
+          <AppleSignInButton
+            dark={colors.bg === '#0b1220' || colors.bg.startsWith('#0')}
+            busy={busy}
+            onPress={() => void onApple()}
+          />
+        ) : null}
+        <GoogleSignInButton colors={colors} busy={busy} onPress={() => void signIn()} />
 
         <Text style={[styles.signup, { color: colors.muted }]}>
           Ainda não tem uma conta?{' '}
@@ -97,7 +164,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   hero: {
     alignItems: 'center',
-    paddingBottom: space.xxl,
+    paddingBottom: space.xl,
     gap: space.md,
   },
   title: {
@@ -114,7 +181,15 @@ const styles = StyleSheet.create({
     maxWidth: 340,
   },
   actions: {
-    gap: space.lg,
+    gap: space.md,
+  },
+  forgot: {
+    alignSelf: 'flex-end',
+    fontSize: type.caption,
+    fontWeight: '600',
+    minHeight: 44,
+    textAlignVertical: 'center',
+    paddingTop: 4,
   },
   error: {
     fontSize: type.caption,
@@ -129,6 +204,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
+    marginTop: space.sm,
   },
   rule: {
     flex: 1,
@@ -142,6 +218,7 @@ const styles = StyleSheet.create({
     fontSize: type.body,
     textAlign: 'center',
     lineHeight: 22,
+    marginTop: space.sm,
   },
   signupLink: {
     fontWeight: '600',
