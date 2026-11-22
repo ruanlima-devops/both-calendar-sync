@@ -4,6 +4,9 @@
  *
  * C3-B.4: `.github/workflows/both-stage-watchdog-delivery.yml` may SAFE_SKIP
  * only when path is exact and certified inert content validates (digest+structure).
+ *
+ * C3-C: `.github/workflows/both-stage-watchdog-recovery.yml` may SAFE_SKIP
+ * only when path is exact and certified supervised recovery content validates.
  */
 
 import { readFileSync, existsSync } from 'node:fs';
@@ -12,6 +15,10 @@ import {
   INERT_DELIVERY_WORKFLOW_PATH,
   validateInertDeliveryWorkflowContent,
 } from './inert-delivery-workflow.ts';
+import {
+  SUPERVISED_RECOVERY_WORKFLOW_PATH,
+  validateSupervisedRecoveryWorkflowContent,
+} from './supervised-recovery-workflow.ts';
 
 export type DeployDecision =
   | 'SAFE_SKIP'
@@ -111,6 +118,8 @@ export function classifyDeployChanges(
 
   let inertDeliverySeen = false;
   let inertDeliveryOk = false;
+  let supervisedRecoverySeen = false;
+  let supervisedRecoveryOk = false;
   const inertReasons: string[] = [];
 
   for (const path of paths) {
@@ -134,6 +143,26 @@ export function classifyDeployChanges(
       continue;
     }
 
+    // Exact-path allowlist for C3-C supervised recovery workflow.
+    if (path === SUPERVISED_RECOVERY_WORKFLOW_PATH) {
+      supervisedRecoverySeen = true;
+      const content = readPathContent(path, options);
+      if (content == null) {
+        inertReasons.push('supervised_recovery_file_missing');
+        matched.other.push(path);
+        continue;
+      }
+      const v = validateSupervisedRecoveryWorkflowContent(content);
+      if (!v.ok) {
+        inertReasons.push(...v.reasons);
+        matched.other.push(path);
+        continue;
+      }
+      supervisedRecoveryOk = true;
+      matched.safe_skip.push(path);
+      continue;
+    }
+
     // Near-miss names must never inherit the allowlist.
     if (
       path.startsWith('.github/workflows/') &&
@@ -144,6 +173,15 @@ export function classifyDeployChanges(
       inertReasons.push('inert_delivery_path_mismatch');
       continue;
     }
+    if (
+      path.startsWith('.github/workflows/') &&
+      path.includes('watchdog-recovery') &&
+      path !== SUPERVISED_RECOVERY_WORKFLOW_PATH
+    ) {
+      matched.other.push(path);
+      inertReasons.push('supervised_recovery_path_mismatch');
+      continue;
+    }
 
     if (isSafeSkip(path)) {
       matched.safe_skip.push(path);
@@ -151,7 +189,10 @@ export function classifyDeployChanges(
     }
     if (
       path === '.github/workflows/deploy-stage.yml' ||
-      (path.startsWith('.github/workflows/') && path.includes('deploy') && path !== INERT_DELIVERY_WORKFLOW_PATH)
+      (path.startsWith('.github/workflows/') &&
+        path.includes('deploy') &&
+        path !== INERT_DELIVERY_WORKFLOW_PATH &&
+        path !== SUPERVISED_RECOVERY_WORKFLOW_PATH)
     ) {
       matched.pipeline.push(path);
       continue;
@@ -184,15 +225,27 @@ export function classifyDeployChanges(
     ]);
   }
   if (matched.pipeline.length) {
-    // Delivery YAML must not land beside deploy-stage / other pipeline edits.
+    // Certified workflow YAML must not land beside deploy-stage / other pipeline edits.
     if (inertDeliverySeen) {
       return blocked('UNKNOWN_BLOCKED', ['inert_delivery_workflow_mixed_changeset', 'pipeline_workflow_changed']);
+    }
+    if (supervisedRecoverySeen) {
+      return blocked('UNKNOWN_BLOCKED', [
+        'supervised_recovery_workflow_mixed_changeset',
+        'pipeline_workflow_changed',
+      ]);
     }
     return blocked('BOOTSTRAP_REVIEW', ['pipeline_workflow_changed']);
   }
   if (matched.config.length && !matched.migrations.length && !matched.functions.length) {
     if (inertDeliverySeen) {
       return blocked('UNKNOWN_BLOCKED', ['inert_delivery_workflow_mixed_changeset', 'supabase_config_changed']);
+    }
+    if (supervisedRecoverySeen) {
+      return blocked('UNKNOWN_BLOCKED', [
+        'supervised_recovery_workflow_mixed_changeset',
+        'supabase_config_changed',
+      ]);
     }
     return blocked('REQUIRES_REVIEW', ['supabase_config_changed']);
   }
@@ -203,13 +256,17 @@ export function classifyDeployChanges(
   if (inertDeliverySeen && (db || fn)) {
     return blocked('UNKNOWN_BLOCKED', ['inert_delivery_workflow_mixed_changeset']);
   }
+  if (supervisedRecoverySeen && (db || fn)) {
+    return blocked('UNKNOWN_BLOCKED', ['supervised_recovery_workflow_mixed_changeset']);
+  }
 
   if (!db && !fn) {
+    const reasons = ['only_safe_skip_paths'];
+    if (inertDeliveryOk) reasons.push('inert_delivery_workflow_certified');
+    if (supervisedRecoveryOk) reasons.push('supervised_recovery_workflow_certified');
     return {
       decision: 'SAFE_SKIP',
-      reasons: inertDeliveryOk
-        ? ['only_safe_skip_paths', 'inert_delivery_workflow_certified']
-        : ['only_safe_skip_paths'],
+      reasons,
       matched,
       may_skip_remote_deploy: true,
       run_db: false,

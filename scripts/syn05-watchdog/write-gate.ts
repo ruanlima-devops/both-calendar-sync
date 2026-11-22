@@ -71,6 +71,10 @@ export function isC3B5Authorized(env: WriteGateEnv = {}): boolean {
   return env.BOTH_WATCHDOG_C3_B5_AUTHORIZED === '1';
 }
 
+export function isC3CAuthorized(env: WriteGateEnv = {}): boolean {
+  return env.BOTH_WATCHDOG_C3_C_AUTHORIZED === '1';
+}
+
 /**
  * Fail-closed gate. WRITE=1 alone never authorizes.
  * C3-B.5 supervised path requires full auth bag + synthetic fixture fingerprint.
@@ -195,6 +199,7 @@ export function defaultC0Env(extra: WriteGateEnv = {}): WriteGateEnv {
     BOTH_WATCHDOG_DELIVERY_MODE: 'simulation',
     BOTH_WATCHDOG_C3_B41_FORCE_BLOCK: '1',
     BOTH_WATCHDOG_C3_B5_AUTHORIZED: '0',
+    BOTH_WATCHDOG_C3_C_AUTHORIZED: '0',
     ...extra,
   };
 }
