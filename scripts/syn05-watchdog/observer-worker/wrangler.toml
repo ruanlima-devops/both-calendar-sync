@@ -1,0 +1,24 @@
+# SYN-05 external observer — INERT configuration
+# Cron DISABLED (empty array). Do not add schedules without separate PO auth.
+# Deploy of this Worker is a separate provisioning step; this file documents intent.
+
+name = "both-stage-syn05-observer"
+main = "../cloudflare-scheduled-adapter.ts"
+compatibility_date = "2026-11-01"
+
+# Kill switch: empty crons = no scheduled invocations
+[triggers]
+crons = []
+
+# No routes / custom domains configured here.
+# workers.dev: leave disabled in dashboard if account allows.
+
+[vars]
+OBSERVER_AUTHORIZATION_GATE = "OFF"
+EXPECTED_REPO = "ruanlima-devops/both-calendar-sync"
+
+# Secrets (NOT in git — set only at provision time via wrangler secret):
+# GITHUB_APP_ID
+# GITHUB_INSTALLATION_ID
+# GITHUB_APP_PRIVATE_KEY_PKCS8
+# BETTERSTACK_HEARTBEAT_A_URL (optional; must not auto-activate)
