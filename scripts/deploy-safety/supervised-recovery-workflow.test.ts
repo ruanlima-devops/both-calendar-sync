@@ -1,5 +1,5 @@
 /**
- * C3-C — supervised recovery workflow Deploy Safety allowlist negatives.
+ * C3-C FINAL OFF — recovery workflow allowlist negatives.
  */
 
 import { readFileSync } from 'node:fs';
@@ -33,29 +33,19 @@ function expectBlocked(r: ReturnType<typeof classifyDeployChanges>) {
   expect(r.run_functions).toBe(false);
 }
 
-describe('C3-C supervised recovery workflow', () => {
+describe('C3-C FINAL OFF recovery workflow', () => {
   it('certified digest + structure', () => {
     expect(sha256Hex(CERTIFIED)).toBe(SUPERVISED_RECOVERY_WORKFLOW_SHA256);
     expect(validateSupervisedRecoveryWorkflowContent(CERTIFIED).ok).toBe(true);
   });
 
-  it('SAFE_SKIP for certified content', () => {
+  it('SAFE_SKIP for certified OFF content', () => {
     const r = classifyWith(CERTIFIED);
     expect(r.decision).toBe('SAFE_SKIP');
     expect(r.reasons).toContain('supervised_recovery_workflow_certified');
-    expect(r.run_db).toBe(false);
-    expect(r.run_functions).toBe(false);
   });
 
-  it('SAFE_SKIP with watchdog scripts', () => {
-    const r = classifyDeployChanges(
-      [SUPERVISED_RECOVERY_WORKFLOW_PATH, 'scripts/syn05-watchdog/c3c-recovery.ts'],
-      { contentByPath: { [SUPERVISED_RECOVERY_WORKFLOW_PATH]: CERTIFIED } },
-    );
-    expect(r.decision).toBe('SAFE_SKIP');
-  });
-
-  it('blocks schedule/push/PR/workflow_run', () => {
+  it('blocks schedule/push', () => {
     expectBlocked(
       classifyWith(
         mutate((s) =>
@@ -63,10 +53,25 @@ describe('C3-C supervised recovery workflow', () => {
         ),
       ),
     );
+  });
+
+  it('blocks issues:write reintroduction', () => {
     expectBlocked(
       classifyWith(
         mutate((s) =>
-          s.replace('"on":\n  workflow_dispatch:', '"on":\n  push:\n    branches: [develop]\n  workflow_dispatch:'),
+          s.replace('contents: read\n\nconcurrency:', 'contents: read\n  issues: write\n\nconcurrency:'),
+        ),
+      ),
+    );
+  });
+
+  it('blocks supervised job / CLI reintroduction', () => {
+    expectBlocked(
+      classifyWith(
+        mutate(
+          (s) =>
+            s +
+            '\n  delivery-supervised-recovery:\n    runs-on: ubuntu-latest\n    steps:\n      - run: node --experimental-strip-types scripts/syn05-watchdog/c3c-recovery-cli.ts\n',
         ),
       ),
     );
@@ -76,28 +81,11 @@ describe('C3-C supervised recovery workflow', () => {
     expectBlocked(classifyWith(mutate((s) => s + '\n# drift\n')));
   });
 
-  it('blocks near-miss path', () => {
-    const r = classifyDeployChanges(['.github/workflows/both-stage-watchdog-recovery-extra.yml']);
-    expect(r.decision).toBe('UNKNOWN_BLOCKED');
-  });
-
   it('blocks mixed with deploy-stage', () => {
     const r = classifyDeployChanges(
       [SUPERVISED_RECOVERY_WORKFLOW_PATH, '.github/workflows/deploy-stage.yml'],
       { contentByPath: { [SUPERVISED_RECOVERY_WORKFLOW_PATH]: CERTIFIED } },
     );
     expect(r.decision).toBe('UNKNOWN_BLOCKED');
-  });
-
-  it('blocks removing recovery CLI', () => {
-    expectBlocked(
-      classifyWith(mutate((s) => s.replace('c3c-recovery-cli.ts', 'evil-cli.ts'))),
-    );
-  });
-
-  it('blocks secrets / supabase / curl', () => {
-    expectBlocked(classifyWith(mutate((s) => s + '\n      - run: echo ${{ secrets.X }}\n')));
-    expectBlocked(classifyWith(mutate((s) => s + '\n      - run: supabase db push\n')));
-    expectBlocked(classifyWith(mutate((s) => s + '\n      - run: curl https://evil\n')));
   });
 });

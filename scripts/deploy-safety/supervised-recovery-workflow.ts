@@ -1,6 +1,6 @@
 /**
- * SYN-05 C3-C — certified supervised recovery workflow allowlist.
- * Exact path + digest pin + structure. issues:write only on delivery-supervised-recovery.
+ * SYN-05 C3-C — certified recovery workflow allowlist (FINAL OFF).
+ * Exact path + digest pin + structure. No issues:write. No supervised job.
  */
 
 import { createHash } from 'node:crypto';
@@ -10,9 +10,9 @@ import { join } from 'node:path';
 export const SUPERVISED_RECOVERY_WORKFLOW_PATH =
   '.github/workflows/both-stage-watchdog-recovery.yml' as const;
 
-/** C3-C supervised recovery essay workflow (digest pin). */
+/** C3-C final OFF recovery workflow (post-essay disablement). */
 export const SUPERVISED_RECOVERY_WORKFLOW_SHA256 =
-  '5b9b636c7b695f2adc7b31982baec8e0f2b3a1d0fc298b3cc77db379bd46a8f0' as const;
+  'be6bb93b77f095636ec5c5676ca8c000cab9844f2704fa6f4fe08a115b846690' as const;
 
 export type SupervisedRecoveryValidation = {
   ok: boolean;
@@ -125,35 +125,29 @@ export function validateSupervisedRecoveryWorkflowContent(content: string): Supe
   if (!/^name:\s*Both STAGE Watchdog Recovery\s*$/m.test(content)) {
     reasons.push('supervised_recovery_name_mismatch');
   }
-  if (!/delivery-supervised-recovery:/.test(stripped)) {
-    reasons.push('supervised_recovery_missing_supervised_job');
-  }
   if (!/recovery-off:/.test(stripped)) {
     reasons.push('supervised_recovery_missing_off_job');
   }
-
-  // Top-level permissions must be contents:read only (no global issues:write)
-  const topPerm = content.match(/^permissions:\s*\n((?:[ \t]+.+\n)*)/m);
-  if (!topPerm || !/contents:\s*read/.test(topPerm[1]) || /issues\s*:\s*write/i.test(topPerm[1])) {
-    reasons.push('supervised_recovery_toplevel_permissions');
+  if (/delivery-supervised-recovery:/.test(stripped)) {
+    reasons.push('supervised_recovery_supervised_job_must_be_removed');
   }
-
-  // issues:write allowed only under delivery-supervised-recovery job block
-  const issuesWriteMatches = [...stripped.matchAll(/issues\s*:\s*write/gi)];
-  if (issuesWriteMatches.length !== 1) {
-    reasons.push('supervised_recovery_issues_write_count');
+  if (!/permissions:\s*\n\s*contents:\s*read\b/.test(content)) {
+    reasons.push('supervised_recovery_contents_read_missing');
   }
-  const supervisedIdx = stripped.indexOf('delivery-supervised-recovery:');
-  const issuesIdx = stripped.search(/issues\s*:\s*write/i);
-  if (supervisedIdx < 0 || issuesIdx < 0 || issuesIdx < supervisedIdx) {
-    reasons.push('supervised_recovery_issues_write_wrong_job');
+  if (/issues\s*:\s*write/i.test(stripped)) {
+    reasons.push('supervised_recovery_issues_write');
   }
-
-  if (!/c3c-recovery-cli\.ts/.test(stripped)) {
-    reasons.push('supervised_recovery_cli_missing');
+  if (/:\s*write\b/i.test(stripped)) {
+    reasons.push('supervised_recovery_permission_write');
   }
-  if (/supervised-delivery-cli\.ts/.test(stripped)) {
-    reasons.push('supervised_recovery_banned_delivery_cli');
+  if (/BOTH_WATCHDOG_GITHUB_WRITE:\s*["']?1/.test(stripped)) {
+    reasons.push('supervised_recovery_write_flag_enabled');
+  }
+  if (/BOTH_WATCHDOG_C3_C_AUTHORIZED:\s*["']?1/.test(stripped)) {
+    reasons.push('supervised_recovery_c3c_auth_enabled');
+  }
+  if (/c3c-recovery-cli\.ts/.test(stripped)) {
+    reasons.push('supervised_recovery_cli_must_be_removed');
   }
   if (/\$\{\{\s*secrets\./i.test(stripped) || /^\s*secrets\s*:/m.test(stripped)) {
     reasons.push('supervised_recovery_banned_secrets');
@@ -168,19 +162,12 @@ export function validateSupervisedRecoveryWorkflowContent(content: string): Supe
   if (/(^|\s)[&*][A-Za-z0-9_-]+/m.test(stripped)) {
     reasons.push('supervised_recovery_banned_anchor_or_alias');
   }
+  if (/^\s+-\s+uses:\s+/m.test(stripped)) {
+    reasons.push('supervised_recovery_banned_uses_action');
+  }
   if (/cron\s*:/i.test(stripped)) reasons.push('supervised_recovery_trigger_schedule');
   if (!/cancel-in-progress:\s*false/.test(stripped)) {
     reasons.push('supervised_recovery_cancel_in_progress_must_be_false');
-  }
-  if (!/BOTH_WATCHDOG_C3_C_AUTHORIZED:\s*"1"/.test(stripped)) {
-    reasons.push('supervised_recovery_c3c_auth_flag_missing');
-  }
-  // Pin known action SHAs
-  if (!/actions\/checkout@d23441a48e516b6c34aea4fa41551a30e30af803/.test(stripped)) {
-    reasons.push('supervised_recovery_checkout_pin');
-  }
-  if (!/actions\/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1/.test(stripped)) {
-    reasons.push('supervised_recovery_setup_node_pin');
   }
 
   const structure_ok = !reasons.some(

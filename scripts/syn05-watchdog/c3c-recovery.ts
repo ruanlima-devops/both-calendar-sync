@@ -278,17 +278,32 @@ export async function runC3CPhase(opts: {
   }
 
   const beforeStreak = existing.consecutive_healthy;
-  const { actions } = await reconcileIncidents(opts.ports.issues, [ev], {
+  const { actions, incidents: afterIncidents } = await reconcileIncidents(opts.ports.issues, [ev], {
     dryRun: false,
     healthyToResolve: 2,
     nowIso: new Date().toISOString(),
   });
 
-  // Re-read
+  // Re-read (open list / closed search may lag briefly after close)
   let afterOpen = await findC3COpenIssue(opts.ports.issues);
   let closedHit: IncidentRecord | null = null;
-  if (!afterOpen) {
+  const resolvedAction = actions.find((a) => a.type === 'resolve');
+  if (resolvedAction && 'incident' in resolvedAction && resolvedAction.incident) {
+    closedHit = hydrateIncidentFromBody({ ...resolvedAction.incident, state: 'closed' });
+  }
+  if (!afterOpen && !closedHit) {
     closedHit = (await opts.ports.issues.findClosedByFingerprint?.(C3_C_FINGERPRINT)) ?? null;
+  }
+  if (!afterOpen && !closedHit) {
+    // Last resort: fingerprint disappeared from open set after resolve → treat as closed
+    const gone = !afterIncidents.some((i) => i.fingerprint === C3_C_FINGERPRINT && i.state === 'open');
+    if (gone && resolvedAction) {
+      closedHit = hydrateIncidentFromBody({
+        ...existing,
+        state: 'closed',
+        consecutive_healthy: Math.max(beforeStreak + 1, 2),
+      });
+    }
   }
 
   if (opts.phase === 'HEALTHY_1') {
