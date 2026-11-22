@@ -360,9 +360,8 @@ describe('C3-B.4.1 collector/evaluator split', () => {
   });
 });
 
-describe('C3-B.4.1 disabled delivery workflow YAML', () => {
+describe('C3-B.5 delivery workflow YAML (empty-run fix)', () => {
   const ymlPath = resolve('.github/workflows/both-stage-watchdog-delivery.yml');
-  // Entrega 1 subset intentionally omits the workflow; YAML suite runs only when present.
   const ymlPresent = (() => {
     try {
       readFileSync(ymlPath, 'utf8');
@@ -372,33 +371,40 @@ describe('C3-B.4.1 disabled delivery workflow YAML', () => {
     }
   })();
 
-  it('AF has no executable triggers (on: {})', () => {
+  it('AF quoted on + workflow_dispatch only; no schedule/push/PR', () => {
     if (!ymlPresent) return;
     const yml = readFileSync(ymlPath, 'utf8');
-    expect(yml).toMatch(/\non:\s*\{\s*\}/);
-    expect(yml).not.toMatch(/^\s*schedule:/m);
-    expect(yml).not.toMatch(/^\s*workflow_dispatch:/m);
-    expect(yml).not.toMatch(/^\s*workflow_run:/m);
-    expect(yml).not.toMatch(/^\s*pull_request_target:/m);
-    expect(yml).not.toMatch(/^\s*push:/m);
+    expect(yml).toMatch(/^"on":\s*$/m);
+    expect(yml).not.toMatch(/^on:\s*\{\s*\}/m);
+    expect(yml).toMatch(/^\s+workflow_dispatch:/m);
+    const active = yml
+      .split('\n')
+      .filter((l) => !/^\s*#/.test(l))
+      .join('\n');
+    expect(active).not.toMatch(/^\s+schedule:/m);
+    expect(active).not.toMatch(/^\s+workflow_run:/m);
+    expect(active).not.toMatch(/^\s+pull_request_target:/m);
+    expect(active).not.toMatch(/^\s+push:/m);
+    expect(active).not.toMatch(/^\s+pull_request:/m);
   });
 
-  it('AG/AH/AI no issues:write, no supabase tokens, no deploy', () => {
+  it('AG/AH/AI issues:write only on supervised job; no supabase/deploy', () => {
     if (!ymlPresent) return;
     const yml = readFileSync(ymlPath, 'utf8');
     const active = yml
       .split('\n')
       .filter((l) => !/^\s*#/.test(l))
       .join('\n');
-    expect(active).not.toMatch(/issues:\s*write/);
+    expect(active).toMatch(/delivery-supervised:[\s\S]*issues:\s*write/);
     expect(active).not.toMatch(/SUPABASE_ACCESS_TOKEN/);
     expect(active).not.toMatch(/SUPABASE_DB_PASSWORD/);
     expect(active).not.toMatch(/db push|functions deploy/i);
     expect(yml).toContain('contents: read');
     expect(yml).toContain('cancel-in-progress: false');
+    expect(yml).toContain('delivery-off:');
   });
 
-  it('YAML parses offline or is intentionally absent in subset', () => {
+  it('YAML has OFF default inputs and supervised CLI', () => {
     if (!ymlPresent) {
       expect(ymlPresent).toBe(false);
       return;
@@ -407,6 +413,7 @@ describe('C3-B.4.1 disabled delivery workflow YAML', () => {
     expect(yml).toContain('name:');
     expect(yml).toContain('permissions:');
     expect(yml).toContain('jobs:');
-    expect(yml).toContain('if: ${{ false }}');
+    expect(yml).toContain('default: OFF');
+    expect(yml).toContain('supervised-delivery-cli.ts');
   });
 });
