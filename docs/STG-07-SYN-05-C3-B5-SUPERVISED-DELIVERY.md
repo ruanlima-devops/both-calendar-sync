@@ -17,3 +17,9 @@
 
 ## Non-goals
 - No schedule, no continuous delivery, no operational alerts, no deploy.
+
+## Post-test disablement
+- Workflow reduced to OFF-only `workflow_dispatch`.
+- `issues:write` removed.
+- Oneshot path removed.
+- Defaults remain DRY_RUN=1 WRITE=0 NETWORK=0.
