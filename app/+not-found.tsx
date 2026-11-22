@@ -6,12 +6,14 @@ import { Text, View } from '@/components/Themed';
 export default function NotFoundScreen() {
   return (
     <>
-      <Stack.Screen options={{ title: 'Oops!' }} />
+      <Stack.Screen options={{ title: 'Página não encontrada' }} />
       <View style={styles.container}>
-        <Text style={styles.title}>This screen doesn't exist.</Text>
+        <Text style={styles.brand}>Both</Text>
+        <Text style={styles.title}>Esta página não existe.</Text>
+        <Text style={styles.body}>Volte à agenda ou abra o Both pelo endereço principal.</Text>
 
         <Link href="/" style={styles.link}>
-          <Text style={styles.linkText}>Go to home screen!</Text>
+          <Text style={styles.linkText}>Ir para o início</Text>
         </Link>
       </View>
     </>
@@ -23,18 +25,31 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,
+    padding: 24,
+    gap: 8,
+  },
+  brand: {
+    fontSize: 28,
+    fontWeight: '700',
   },
   title: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  body: {
+    fontSize: 14,
+    opacity: 0.7,
+    textAlign: 'center',
+    maxWidth: 320,
   },
   link: {
-    marginTop: 15,
-    paddingVertical: 15,
+    marginTop: 16,
+    paddingVertical: 12,
   },
   linkText: {
     fontSize: 14,
-    color: '#2e78b7',
+    color: '#0F766E',
+    fontWeight: '600',
   },
 });
