@@ -354,20 +354,24 @@ describe('C3-C FIRING → HEALTHY#1 → HEALTHY#2 cross-run', () => {
 });
 
 describe('C3-C workflow file static gates', () => {
-  it('recovery YAML has no schedule and job-scoped issues:write', async () => {
+  it('recovery YAML is OFF: no schedule, no issues:write, no supervised job', async () => {
     const { readFileSync } = await import('node:fs');
     const yml = readFileSync(
       new URL('../../.github/workflows/both-stage-watchdog-recovery.yml', import.meta.url),
       'utf8',
     );
     expect(yml).toContain('name: Both STAGE Watchdog Recovery');
-    expect(yml).toContain('delivery-supervised-recovery:');
+    expect(yml).toContain('recovery-off:');
+    expect(yml).not.toContain('delivery-supervised-recovery:');
+    expect(yml).not.toContain('c3c-recovery-cli.ts');
     expect(yml).not.toMatch(/^\s+schedule\s*:/m);
     expect(yml).not.toMatch(/pull_request_target/);
-    expect(yml).toContain('c3c-recovery-cli.ts');
     expect(yml).toContain('cancel-in-progress: false');
-    // job-scoped issues:write (comments may mention the phrase)
-    expect(yml).toMatch(/delivery-supervised-recovery:[\s\S]*issues:\s*write/);
     expect(yml).toMatch(/^permissions:\s*\n\s*contents:\s*read\s*$/m);
+    const stripped = yml
+      .split('\n')
+      .map((l) => (l.includes('#') ? l.slice(0, l.indexOf('#')) : l))
+      .join('\n');
+    expect(stripped).not.toMatch(/issues\s*:\s*write/i);
   });
 });
