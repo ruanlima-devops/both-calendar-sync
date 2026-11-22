@@ -1,6 +1,21 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { StripeBillingGateway } from '../billing/cancel-before-delete.ts';
 import { AccountDeleteBlockedError } from './oauth-revoke.ts';
 import { deleteUserAccount } from './delete-user.ts';
+
+function stripeSkipGateway(): StripeBillingGateway {
+  return {
+    configured: () => true,
+    assertKeyMode: () => undefined,
+    listByCustomer: async () => [],
+    get: async () => {
+      throw Object.assign(new Error('no such subscription'), { httpStatus: 404 });
+    },
+    cancelNow: async () => {
+      throw new Error('should_not_cancel');
+    },
+  };
+}
 
 type TableState = Record<string, Array<Record<string, unknown>>>;
 
@@ -117,6 +132,7 @@ describe('deleteUserAccount', () => {
     const result = await deleteUserAccount(db, 'u1', 'test-key', {
       getAccessToken: async () => ({ accessToken: 'access', provider: 'GOOGLE', userId: 'u1' }),
       revoke,
+      stripe: stripeSkipGateway(),
       providerForFn: () =>
         ({
           deleteWebhookSubscription: deleteWebhook,
@@ -124,6 +140,7 @@ describe('deleteUserAccount', () => {
     });
 
     expect(result.ok).toBe(true);
+    expect(result.billing.outcome).toBe('skipped_no_stripe');
     expect(result.jobsCancelled).toBe(1);
     expect(result.connectionsCleaned).toBe(1);
     expect(result.authDeleted).toBe(true);
@@ -169,6 +186,7 @@ describe('deleteUserAccount', () => {
     const result = await deleteUserAccount(db, 'u1', 'test-key', {
       getAccessToken: async () => ({ accessToken: 'access', provider: 'MICROSOFT', userId: 'u1' }),
       revoke: async () => 'skipped',
+      stripe: stripeSkipGateway(),
       providerForFn: () =>
         ({
           deleteWebhookSubscription: async () => {
@@ -188,6 +206,7 @@ describe('deleteUserAccount', () => {
     const result = await deleteUserAccount(db, 'u1', 'test-key', {
       getAccessToken: async () => ({ accessToken: 'access', provider: 'GOOGLE', userId: 'u1' }),
       revoke: async () => 'failed',
+      stripe: stripeSkipGateway(),
       providerForFn: () =>
         ({
           deleteWebhookSubscription: async () => {
@@ -206,6 +225,7 @@ describe('deleteUserAccount', () => {
       deleteUserAccount(db, 'u1', 'test-key', {
         getAccessToken: async () => ({ accessToken: 'access', provider: 'GOOGLE', userId: 'u1' }),
         revoke: async () => 'revoked',
+        stripe: stripeSkipGateway(),
         providerForFn: () =>
           ({
             deleteWebhookSubscription: async () => {
@@ -229,6 +249,7 @@ describe('deleteUserAccount', () => {
       deleteUserAccount(db, 'u1', 'test-key', {
         getAccessToken: async () => ({ accessToken: 'access', provider: 'MICROSOFT', userId: 'u1' }),
         revoke: async () => 'skipped',
+        stripe: stripeSkipGateway(),
         providerForFn: () =>
           ({
             deleteWebhookSubscription: async () => {
@@ -252,6 +273,7 @@ describe('deleteUserAccount', () => {
       deleteUserAccount(db, 'u1', 'test-key', {
         getAccessToken: async () => ({ accessToken: 'access', provider: 'GOOGLE', userId: 'u1' }),
         revoke: async () => 'revoked',
+        stripe: stripeSkipGateway(),
         providerForFn: () =>
           ({
             deleteWebhookSubscription: async () => {
@@ -283,10 +305,177 @@ describe('deleteUserAccount', () => {
     });
     authDelete.mockResolvedValueOnce({ error: { message: 'User not found' } });
     const result = await deleteUserAccount(db, 'u-missing', 'test-key', {
+      stripe: stripeSkipGateway(),
       getAccessToken: async () => {
         throw new Error('unused');
       },
     });
     expect(result.authDeleted).toBe(true);
+  });
+
+  it('BIL-05: aborts before local wipe when Stripe cancel fails', async () => {
+    const { db, tables, authDelete } = createFakeDb({
+      sync_jobs: [],
+      calendar_connections: [{ id: 'c1', user_id: 'u1', provider: 'GOOGLE' }],
+      webhook_subscriptions: [],
+      calendar_secrets: [{ connection_id: 'c1', encrypted_refresh_token: 'enc' }],
+      scheduling_links: [],
+      oauth_states: [],
+      notifications: [],
+      billing_events: [{ id: 'b1', user_id: 'u1' }],
+      user_subscriptions: [
+        {
+          user_id: 'u1',
+          billing_provider: 'stripe',
+          billing_customer_id: 'cus_1',
+          billing_subscription_id: 'sub_1',
+          status: 'active',
+          cancel_at_period_end: false,
+        },
+      ],
+      email_digest_log: [],
+      calendar_firewall_rules: [],
+      profiles: [{ id: 'u1' }],
+    });
+
+    await expect(
+      deleteUserAccount(db, 'u1', 'test-key', {
+        stripe: {
+          configured: () => true,
+          assertKeyMode: () => undefined,
+          listByCustomer: async () => [
+            { id: 'sub_1', customer: 'cus_1', status: 'active', cancel_at_period_end: false },
+          ],
+          get: async (id) => ({
+            id,
+            customer: 'cus_1',
+            status: 'active',
+            cancel_at_period_end: false,
+          }),
+          cancelNow: async () => {
+            throw new Error('stripe down');
+          },
+        },
+        getAccessToken: async () => ({ accessToken: 'access', provider: 'GOOGLE', userId: 'u1' }),
+      }),
+    ).rejects.toMatchObject({ message: 'stripe_cancel_failed' });
+
+    expect(tables.profiles).toHaveLength(1);
+    expect(tables.user_subscriptions).toHaveLength(1);
+    expect(tables.calendar_connections).toHaveLength(1);
+    expect(authDelete).not.toHaveBeenCalled();
+  });
+
+  it('BIL-05: cancels Stripe then completes STG-06F local delete', async () => {
+    const cancelNow = vi.fn(async (id: string) => ({
+      id,
+      customer: 'cus_1',
+      status: 'canceled',
+      cancel_at_period_end: false,
+    }));
+    const { db, tables, authDelete } = createFakeDb({
+      sync_jobs: [],
+      calendar_connections: [],
+      webhook_subscriptions: [],
+      calendar_secrets: [],
+      scheduling_links: [],
+      oauth_states: [],
+      notifications: [],
+      billing_events: [{ id: 'b1', user_id: 'u1' }],
+      user_subscriptions: [
+        {
+          user_id: 'u1',
+          billing_provider: 'stripe',
+          billing_customer_id: 'cus_1',
+          billing_subscription_id: 'sub_1',
+          status: 'active',
+          cancel_at_period_end: false,
+        },
+      ],
+      email_digest_log: [],
+      calendar_firewall_rules: [],
+      profiles: [{ id: 'u1' }],
+    });
+
+    const result = await deleteUserAccount(db, 'u1', 'test-key', {
+      stripe: {
+        configured: () => true,
+        assertKeyMode: () => undefined,
+        listByCustomer: async () => [
+          { id: 'sub_1', customer: 'cus_1', status: 'active', cancel_at_period_end: false },
+        ],
+        get: async (id) => ({
+          id,
+          customer: 'cus_1',
+          status: 'canceled',
+          cancel_at_period_end: false,
+        }),
+        cancelNow,
+      },
+      clientSubscriptionId: 'sub_from_browser',
+      getAccessToken: async () => {
+        throw new Error('unused');
+      },
+    });
+
+    expect(cancelNow).toHaveBeenCalledWith('sub_1', expect.any(Object));
+    expect(cancelNow).not.toHaveBeenCalledWith('sub_from_browser', expect.anything());
+    expect(result.billing.outcome).toBe('confirmed');
+    expect(result.authDeleted).toBe(true);
+    expect(authDelete).toHaveBeenCalledWith('u1');
+    expect(tables.profiles).toHaveLength(0);
+    expect(tables.user_subscriptions).toHaveLength(0);
+    expect(tables.billing_events[0]?.user_id).toBeNull();
+  });
+
+  it('BIL-05: concurrent second delete is idempotent after Stripe already canceled', async () => {
+    const { db, authDelete } = createFakeDb({
+      sync_jobs: [],
+      calendar_connections: [],
+      webhook_subscriptions: [],
+      calendar_secrets: [],
+      scheduling_links: [],
+      oauth_states: [],
+      notifications: [],
+      billing_events: [],
+      user_subscriptions: [
+        {
+          user_id: 'u1',
+          billing_provider: 'stripe',
+          billing_customer_id: 'cus_1',
+          billing_subscription_id: 'sub_1',
+          status: 'canceled',
+          cancel_at_period_end: false,
+        },
+      ],
+      email_digest_log: [],
+      calendar_firewall_rules: [],
+      profiles: [{ id: 'u1' }],
+    });
+    const cancelNow = vi.fn(async () => {
+      throw new Error('should_not_run');
+    });
+    const result = await deleteUserAccount(db, 'u1', 'test-key', {
+      stripe: {
+        configured: () => true,
+        assertKeyMode: () => undefined,
+        listByCustomer: async () => [
+          { id: 'sub_1', customer: 'cus_1', status: 'canceled', cancel_at_period_end: false },
+        ],
+        get: async (id) => ({
+          id,
+          customer: 'cus_1',
+          status: 'canceled',
+          cancel_at_period_end: false,
+        }),
+        cancelNow,
+      },
+      getAccessToken: async () => {
+        throw new Error('unused');
+      },
+    });
+    expect(cancelNow).not.toHaveBeenCalled();
+    expect(result.ok).toBe(true);
+    expect(authDelete).toHaveBeenCalled();
   });
 });

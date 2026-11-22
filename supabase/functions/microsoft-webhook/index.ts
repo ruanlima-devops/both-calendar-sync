@@ -1,3 +1,4 @@
+import { evaluateSyncEntitlement, pauseIntegrationsForUser } from '../_shared/billing/entitlement.ts';
 import { sha256Hex, timingSafeEqual } from '../_shared/crypto/tokens.ts';
 import { adminClient, handle, json, text } from '../_shared/function.ts';
 import { logSafe } from '../_shared/http.ts';
@@ -58,6 +59,21 @@ Deno.serve((req) =>
         client_state_valid: true,
         lifecycle: lifecycle ?? null,
       });
+
+      // BIL-02 — ack notification (HTTP 200 overall) without enqueue/sync when denied/unavailable.
+      // Catch-up after reactivation: reconcile-sync / sync-now + preserved cursors (not webhook replay).
+      const gate = await evaluateSyncEntitlement(db, userId);
+      if (!gate.allow) {
+        if (gate.reason === 'blocked_by_entitlement') {
+          await pauseIntegrationsForUser(db, userId);
+        }
+        logSafe('[microsoft-webhook] skipped_entitlement', {
+          subscription: subscriptionId.slice(0, 8),
+          reason: gate.reason,
+          transient: gate.reason === 'entitlement_lookup_failed',
+        });
+        continue;
+      }
 
       const jobId = await enqueueSync(db, {
         userId,

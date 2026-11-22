@@ -1,3 +1,4 @@
+import { evaluateSyncEntitlement, pauseIntegrationsForUser } from '../_shared/billing/entitlement.ts';
 import { sha256Hex, timingSafeEqual } from '../_shared/crypto/tokens.ts';
 import { adminClient, handle, json } from '../_shared/function.ts';
 import { logSafe } from '../_shared/http.ts';
@@ -78,6 +79,25 @@ Deno.serve((req) =>
     });
 
     if (!calendarId) return json({ ok: true });
+
+    // BIL-02 — ack push (HTTP 200) without enqueue/sync when entitlement denies or lookup fails.
+    // Providers treat 200 as delivered; catch-up after reactivation uses reconcile/sync-now + preserved cursors.
+    const gate = await evaluateSyncEntitlement(db, userId);
+    if (!gate.allow) {
+      if (gate.reason === 'blocked_by_entitlement') {
+        await pauseIntegrationsForUser(db, userId);
+      }
+      logSafe('[google-webhook] skipped_entitlement', {
+        channelPrefix: channelId.slice(0, 8),
+        reason: gate.reason,
+        transient: gate.reason === 'entitlement_lookup_failed',
+      });
+      return json({
+        ok: true,
+        skipped: gate.reason,
+        transient: gate.reason === 'entitlement_lookup_failed',
+      });
+    }
 
     const jobId = await enqueueSync(db, {
       userId,

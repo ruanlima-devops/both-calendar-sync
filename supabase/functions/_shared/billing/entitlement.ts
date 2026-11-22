@@ -115,6 +115,46 @@ export async function requireEntitlement(db: SupabaseClient, userId: string): Pr
   return entitlement;
 }
 
+/** Reasons recorded on sync_jobs.error when a job is skipped without external sync. */
+export type SyncEntitlementBlockReason = 'blocked_by_entitlement' | 'entitlement_lookup_failed';
+
+export type SyncEntitlementDecision =
+  | { allow: true; entitlement: Entitlement }
+  | { allow: false; reason: SyncEntitlementBlockReason; entitlement: Entitlement };
+
+/**
+ * BIL-02 — source of truth for whether automatic/manual sync may run.
+ * Uses subscription row + temporal rules (`computeEntitlement`), not the
+ * `paused_by_entitlement` flag alone. Fail-closed on lookup errors.
+ */
+export async function evaluateSyncEntitlement(
+  db: SupabaseClient,
+  userId: string,
+  now = new Date(),
+): Promise<SyncEntitlementDecision> {
+  const empty = computeEntitlement(null, now);
+  if (!userId) {
+    return { allow: false, reason: 'blocked_by_entitlement', entitlement: empty };
+  }
+  try {
+    const { data, error } = await db
+      .from('user_subscriptions')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (error) {
+      return { allow: false, reason: 'entitlement_lookup_failed', entitlement: empty };
+    }
+    const entitlement = computeEntitlement((data as SubscriptionRow | null) ?? null, now);
+    if (!entitlement.hasAccess) {
+      return { allow: false, reason: 'blocked_by_entitlement', entitlement };
+    }
+    return { allow: true, entitlement };
+  } catch {
+    return { allow: false, reason: 'entitlement_lookup_failed', entitlement: empty };
+  }
+}
+
 export async function pauseIntegrationsForUser(db: SupabaseClient, userId: string): Promise<void> {
   await db
     .from('calendar_connections')
