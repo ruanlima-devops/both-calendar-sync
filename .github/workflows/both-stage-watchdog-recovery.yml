@@ -1,9 +1,11 @@
-# SYN-05 / C3-C — Supervised live cross-run recovery essay
+# SYN-05 / C3-C — Recovery workflow FINAL OFF
 #
-# Manual workflow_dispatch only. No schedule / push / PR / workflow_run.
-# issues:write ONLY on job delivery-supervised-recovery.
-# Collector / Evaluator never receive issues:write.
-# Max one synthetic Issue; never mutate Issue #26.
+# Post-supervised-essay disablement:
+# - Quoted "on" + workflow_dispatch only
+# - No schedule / push / pull_request / workflow_run
+# - No issues:write anywhere
+# - No supervised write path
+# - Recovery code remains in repo but is not wired by this workflow
 
 name: Both STAGE Watchdog Recovery
 
@@ -11,22 +13,19 @@ name: Both STAGE Watchdog Recovery
   workflow_dispatch:
     inputs:
       phase:
-        description: "C3-C recovery phase (independent Actions run per phase)"
+        description: "C3-C recovery remains OFF after live essay"
         required: true
         type: choice
         options:
-          - FIRING
-          - HEALTHY_1
-          - HEALTHY_2
           - OFF
         default: OFF
       confirm:
-        description: "Must equal RUN for write phases; otherwise REFUSE"
+        description: "Ignored while OFF"
         required: true
         type: string
         default: REFUSE
       authorized_issue:
-        description: "Authorized C3-C Issue number (required for HEALTHY_*; empty for FIRING)"
+        description: "Ignored while OFF"
         required: false
         type: string
         default: ""
@@ -41,56 +40,13 @@ concurrency:
 jobs:
   recovery-off:
     name: Recovery OFF (refuse)
-    if: ${{ inputs.phase == 'OFF' || inputs.confirm != 'RUN' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
     steps:
-      - name: Refuse recovery write
+      - name: Refuse supervised recovery write
         run: |
-          echo "C3-C recovery workflow refused / OFF for this dispatch."
+          echo "C3-C recovery workflow is permanently OFF for this certification."
           echo "phase=${{ inputs.phase }}"
           exit 0
-
-  delivery-supervised-recovery:
-    name: delivery-supervised-recovery
-    if: ${{ inputs.phase != 'OFF' && inputs.confirm == 'RUN' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      issues: write
-    env:
-      BOTH_WATCHDOG_DRY_RUN: "0"
-      BOTH_WATCHDOG_GITHUB_WRITE: "1"
-      BOTH_WATCHDOG_ENABLE_NETWORK: "1"
-      BOTH_WATCHDOG_DELIVERY_MODE: supervised-write
-      BOTH_WATCHDOG_C3_C_AUTHORIZED: "1"
-      BOTH_WATCHDOG_C3_B5_AUTHORIZED: "0"
-      BOTH_WATCHDOG_C3_B41_FORCE_BLOCK: "0"
-      STAGE_PROJECT_REF: qszggrrjhcwltnmxpxcy
-      GITHUB_REPOSITORY: ruanlima-devops/both-calendar-sync
-      C3_C_PHASE: ${{ inputs.phase }}
-      C3_C_CONFIRM: ${{ inputs.confirm }}
-      C3_C_AUTHORIZED_ISSUE: ${{ inputs.authorized_issue }}
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
-        with:
-          node-version: "22"
-      - name: Install dependencies
-        run: npm ci --ignore-scripts
-      - name: Run C3-C supervised recovery phase
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          C3_C_EXPECTED_COMMIT: ${{ github.sha }}
-          C3_C_ACTIONS_RUN_ID: ${{ github.run_id }}
-          C3_C_ACTIONS_WORKFLOW: ${{ github.workflow }}
-          C3_C_ACTIONS_JOB: ${{ github.job }}
-          C3_C_EVENT_NAME: ${{ github.event_name }}
-          C3_C_REF: ${{ github.ref }}
-        run: node --experimental-strip-types scripts/syn05-watchdog/c3c-recovery-cli.ts
