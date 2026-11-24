@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Typography } from '@/components/ui/Typography';
 import { useSession } from '@/context/session';
 import { useToast } from '@/context/toast';
+import { disconnectConfirmCopy } from '@/lib/calendars/disconnect-confirm';
 import { confirmAction, showMessage } from '@/lib/confirm';
 import { friendlyError } from '@/lib/errors';
 import { connectCalendar } from '@/lib/oauth';
@@ -105,16 +106,7 @@ export default function CalendarsScreen() {
   }
 
   async function disconnect(conn: CalendarConnection) {
-    const confirmed = await confirmAction({
-      title: 'Desconectar',
-      message:
-        conn.provider === 'ICLOUD'
-          ? 'Remover esta conta? Você também pode revogar a senha específica de app em account.apple.com.'
-          : 'Remover esta conta?',
-      cancel: 'Cancelar',
-      confirm: 'Desconectar',
-      destructive: true,
-    });
+    const confirmed = await confirmAction(disconnectConfirmCopy(conn.provider));
     if (!confirmed) return;
     try {
       await invokeFunction('disconnect-calendar', { connectionId: conn.id });
