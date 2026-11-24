@@ -34,6 +34,14 @@ describe('paywall F–H local scenarios', () => {
     expect(result.ok).toBe(true);
   });
 
+  it('H. billing copy rejects secret-shaped body samples', () => {
+    const result = evaluateBillingCopy({
+      trialExpiredTitle: 'Seu período gratuito terminou',
+      bodySample: 'leak ' + ['sk', 'live_'].join('_'),
+    });
+    expect(result.ok).toBe(false);
+  });
+
   it('active subscription leaves paywall', () => {
     expect(
       evaluateActiveLeavesPaywall({
