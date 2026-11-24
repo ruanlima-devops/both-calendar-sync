@@ -86,7 +86,8 @@ describe('web OAuth popup return', () => {
 });
 
 describe('client nonce', () => {
-  it('encodes at least 128 random bits and refuses less', () => {
+  it('encodes production 256-bit nonces as 64 hex chars and refuses less than 128 bits', () => {
+    // connectCalendar uses Crypto.getRandomBytesAsync(32) → 256 bits.
     expect(encodeClientNonce(new Uint8Array(32).fill(255))).toMatch(/^[0-9a-f]{64}$/);
     expect(encodeClientNonce(new Uint8Array(16))).toHaveLength(32);
     expect(() => encodeClientNonce(new Uint8Array(15))).toThrow();
