@@ -15,6 +15,7 @@ import {
   normalizePostgresCronRows,
 } from './normalize.ts';
 import { reconcileIncidents, summarizeRun } from './reconcile.ts';
+import { resolveCollectorLogsReadToken } from './collector-token-env.ts';
 import { computeQueryWindow, SupabaseLogsClient } from './supabase-logs-client.ts';
 import { STAGE_PROJECT_REF, type NormalizedSignal, type WatchdogRunResult } from './types.ts';
 import { safeErrorMessage } from './redact.ts';
@@ -45,7 +46,18 @@ export async function runWatchdogOnce(opts: RunOptions = {}): Promise<WatchdogRu
   const networkEnabled = process.env.BOTH_WATCHDOG_ENABLE_NETWORK === '1';
   if (!opts.injectedSignals && networkEnabled) {
     // Still STAGE-only client; Gate B local certification must not set this.
-    const token = process.env.SUPABASE_ACCESS_TOKEN ?? '';
+    // Prefer OF-03 dedicated name; legacy SUPABASE_ACCESS_TOKEN is a residual-risk alias only.
+    const resolved = resolveCollectorLogsReadToken(process.env);
+    if (resolved.usesLegacyDeployAlias) {
+      console.warn(
+        JSON.stringify({
+          message: 'collector_token_legacy_alias',
+          source: resolved.source,
+          note: 'prefer SUPABASE_LOGS_READ_TOKEN; do not reuse deploy CLI token',
+        }),
+      );
+    }
+    const token = resolved.token;
     const client = new SupabaseLogsClient({ accessToken: token || 'invalid-token-placeholder' });
     const window = computeQueryWindow({
       nowMs,
