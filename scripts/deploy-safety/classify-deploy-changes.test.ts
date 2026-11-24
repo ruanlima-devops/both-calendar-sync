@@ -5,9 +5,43 @@ import { describe, expect, it, afterEach } from 'vitest';
 import {
   classifyDeployChanges,
   assertSec07TombstonePresent,
+  FRONTEND_CLIENT_SAFE_SKIP_EXACT,
+  isUnsafePathShape,
+  frontendAllowlistContentRejected,
 } from './classify-deploy-changes';
 import { assertDeployDecision } from './assert-deploy-decision';
 import { readFileSync } from 'node:fs';
+
+/** Exact changed paths from merge #42 (first-parent diff). */
+const PR42_AUTH_PATHS = [
+  'app/(app)/(tabs)/settings.tsx',
+  'app/(auth)/confirm-email.tsx',
+  'app/(auth)/forgot-password.tsx',
+  'app/(auth)/login.tsx',
+  'app/(auth)/sign-up.tsx',
+  'app/auth/update-password.tsx',
+  'components/auth/AuthPasswordField.tsx',
+  'components/auth/AuthPrimaryButton.tsx',
+  'components/auth/AuthTextField.tsx',
+  'lib/auth/email-password.ts',
+  'lib/auth/errors.password.test.ts',
+  'lib/auth/errors.ts',
+  'lib/auth/identity-safety.test.ts',
+  'lib/auth/identity-safety.ts',
+  'lib/auth/password-policy.test.ts',
+  'lib/auth/password-policy.ts',
+] as const;
+
+/** Exact changed paths from PR #43 head vs merge-base #42. */
+const PR43_ONBOARDING_PATHS = [
+  'app/(onboarding)/index.tsx',
+  'lib/calendars/lifecycle.test.ts',
+  'lib/calendars/lifecycle.ts',
+  'lib/onboarding/calendar-step.test.ts',
+  'lib/onboarding/calendar-step.ts',
+  'lib/onboarding/journey.test.ts',
+  'lib/onboarding/journey.ts',
+] as const;
 
 const tmpDirs: string[] = [];
 afterEach(() => {
@@ -103,6 +137,152 @@ describe('C0.5 classifyDeployChanges', () => {
   it('T11 unknown path → UNKNOWN_BLOCKED', () => {
     const r = classifyDeployChanges(['package.json']);
     expect(r.decision).toBe('UNKNOWN_BLOCKED');
+  });
+
+  /**
+   * Recovery from incident 2026-11-22 (Deploy STAGE run 45030676921).
+   * T11b from diagnostic worktree asserted UNKNOWN_BLOCKED pre-fix; post-fix
+   * the audited exact paths must SAFE_SKIP with run_*=false (no Supabase deploy).
+   */
+  it('T11b PR42 auth frontend exact paths → SAFE_SKIP (deploy target only)', () => {
+    for (const p of PR42_AUTH_PATHS) {
+      expect(FRONTEND_CLIENT_SAFE_SKIP_EXACT.has(p)).toBe(true);
+    }
+    const r = classifyDeployChanges([...PR42_AUTH_PATHS], {
+      contentByPath: Object.fromEntries(PR42_AUTH_PATHS.map((p) => [p, 'export const x = 1;\n'])),
+    });
+    expect(r.decision).toBe('SAFE_SKIP');
+    expect(r.reasons).toContain('only_safe_skip_paths');
+    expect(r.run_db).toBe(false);
+    expect(r.run_functions).toBe(false);
+    expect(r.may_skip_remote_deploy).toBe(true);
+    expect(r.matched.other).toEqual([]);
+    expect(r.matched.migrations).toEqual([]);
+    expect(r.matched.functions).toEqual([]);
+
+    const decisionPath = writeDecision(r);
+    const a = assertDeployDecision(decisionPath);
+    expect(a.ok).toBe(true);
+    expect(a.decision).toBe('SAFE_SKIP');
+    expect(a.run_db).toBe(false);
+    expect(a.run_functions).toBe(false);
+    expect(a.skip_remote).toBe(true);
+  });
+
+  it('T11c PR43 onboarding exact paths → SAFE_SKIP', () => {
+    const r = classifyDeployChanges([...PR43_ONBOARDING_PATHS], {
+      contentByPath: Object.fromEntries(PR43_ONBOARDING_PATHS.map((p) => [p, 'export const y = 1;\n'])),
+    });
+    expect(r.decision).toBe('SAFE_SKIP');
+    expect(r.run_db).toBe(false);
+    expect(r.run_functions).toBe(false);
+    expect(r.may_skip_remote_deploy).toBe(true);
+  });
+
+  it('T11d sibling under app/ not in exact allowlist → UNKNOWN_BLOCKED', () => {
+    const r = classifyDeployChanges(['app/(auth)/brand-new-screen.tsx']);
+    expect(r.decision).toBe('UNKNOWN_BLOCKED');
+    expect(r.reasons[0]).toBe('unclassified_paths');
+    expect(r.may_skip_remote_deploy).toBe(false);
+  });
+
+  it('T11e no generic app/** components/** lib/** allowlist', () => {
+    for (const p of [
+      'app/evil.tsx',
+      'components/ui/Button.tsx',
+      'lib/supabase.ts',
+      'lib/billing/client.ts',
+      'lib/oauth.ts',
+    ]) {
+      const r = classifyDeployChanges([p]);
+      expect(r.decision).toBe('UNKNOWN_BLOCKED');
+    }
+  });
+
+  it('T11f mixed safe frontend + unknown → UNKNOWN_BLOCKED', () => {
+    const r = classifyDeployChanges([
+      'app/(auth)/login.tsx',
+      'package.json',
+    ]);
+    expect(r.decision).toBe('UNKNOWN_BLOCKED');
+    expect(r.may_skip_remote_deploy).toBe(false);
+  });
+
+  it('T11g mixed safe frontend + function → DEPLOY_CANDIDATE_FUNCTIONS', () => {
+    const r = classifyDeployChanges([
+      'app/(auth)/login.tsx',
+      'supabase/functions/delete-account/index.ts',
+    ]);
+    expect(r.decision).toBe('DEPLOY_CANDIDATE_FUNCTIONS');
+    expect(r.run_functions).toBe(true);
+    expect(r.may_skip_remote_deploy).toBe(false);
+  });
+
+  it('T11h mixed safe frontend + migration → DEPLOY_CANDIDATE_DB', () => {
+    const r = classifyDeployChanges([
+      'lib/onboarding/journey.ts',
+      'supabase/migrations/20261118000099_x.sql',
+    ]);
+    expect(r.decision).toBe('DEPLOY_CANDIDATE_DB');
+    expect(r.run_db).toBe(true);
+    expect(r.may_skip_remote_deploy).toBe(false);
+  });
+
+  it('T11i path traversal / absolute never SAFE_SKIP', () => {
+    expect(isUnsafePathShape('../app/(auth)/login.tsx')).toBe(true);
+    expect(isUnsafePathShape('app/../supabase/migrations/x.sql')).toBe(true);
+    expect(isUnsafePathShape('/etc/passwd')).toBe(true);
+    expect(isUnsafePathShape('app//login.tsx')).toBe(true);
+    for (const p of [
+      '../app/(auth)/login.tsx',
+      'app/../../supabase/functions/x/index.ts',
+      'app/(auth)/../(auth)/login.tsx',
+    ]) {
+      const r = classifyDeployChanges([p]);
+      expect(r.decision).toBe('UNKNOWN_BLOCKED');
+      expect(r.may_skip_remote_deploy).toBe(false);
+    }
+  });
+
+  it('T11j SQL content on allowlisted path → UNKNOWN_BLOCKED (rename-onto)', () => {
+    expect(frontendAllowlistContentRejected('CREATE TABLE foo (id int);\n')).toBe(true);
+    const r = classifyDeployChanges(['app/(auth)/login.tsx'], {
+      contentByPath: {
+        'app/(auth)/login.tsx': 'CREATE TABLE secrets (token text);\n',
+      },
+    });
+    expect(r.decision).toBe('UNKNOWN_BLOCKED');
+    expect(r.matched.other).toContain('app/(auth)/login.tsx');
+  });
+
+  it('T11k case mismatch / deploy-looking sibling stays blocked', () => {
+    expect(classifyDeployChanges(['App/(auth)/login.tsx']).decision).toBe('UNKNOWN_BLOCKED');
+    expect(classifyDeployChanges(['app/(auth)/deploy.ts']).decision).toBe('UNKNOWN_BLOCKED');
+    expect(classifyDeployChanges(['components/auth/config.toml']).decision).toBe('UNKNOWN_BLOCKED');
+    expect(classifyDeployChanges(['lib/auth/secret.env']).decision).toBe('UNKNOWN_BLOCKED');
+  });
+
+  it('T11l lockfile / package.json / workflow / config remain blocked or reviewed', () => {
+    expect(classifyDeployChanges(['package-lock.json']).decision).toBe('UNKNOWN_BLOCKED');
+    expect(classifyDeployChanges(['package.json']).decision).toBe('UNKNOWN_BLOCKED');
+    expect(classifyDeployChanges(['supabase/config.toml']).decision).toBe('REQUIRES_REVIEW');
+    expect(classifyDeployChanges(['.github/workflows/deploy-stage.yml']).decision).toBe(
+      'BOOTSTRAP_REVIEW',
+    );
+  });
+
+  it('T11m deletion of allowlisted frontend path (no content) → SAFE_SKIP', () => {
+    const r = classifyDeployChanges(['lib/auth/errors.ts'], {
+      contentByPath: { 'lib/auth/errors.ts': null },
+    });
+    expect(r.decision).toBe('SAFE_SKIP');
+    expect(r.run_db).toBe(false);
+    expect(r.run_functions).toBe(false);
+  });
+
+  it('T11n allowlist is exact-set only (count guard against broad expansion)', () => {
+    // Guardrail: keep the set intentionally small; bump only with semantic audit.
+    expect(FRONTEND_CLIENT_SAFE_SKIP_EXACT.size).toBe(23);
   });
 
   it('T12 migrations + functions → DEPLOY_CANDIDATE_BOTH', () => {
