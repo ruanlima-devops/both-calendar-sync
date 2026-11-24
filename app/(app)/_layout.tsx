@@ -8,22 +8,18 @@ import { NotificationProvider } from '@/context/notifications';
 import { ToastProvider } from '@/context/toast';
 import { useSession } from '@/context/session';
 import { destinationForSession } from '@/lib/auth/routing';
+import { resolveEntitlementRedirect } from '@/lib/billing/entitlement-gate';
 
 function EntitlementGate({ children }: { children: React.ReactNode }) {
   const segments = useSegments();
   const { entitlement, loading } = useEntitlement();
   const path = segments.join('/');
-  const allowedWithoutAccess =
-    path.includes('paywall') || path.includes('settings') || path.includes('billing');
 
   if (loading) return <SessionSplash />;
 
-  if (!entitlement.hasAccess && !allowedWithoutAccess) {
-    return <Redirect href="/(app)/paywall" />;
-  }
-
-  if (entitlement.hasAccess && path.includes('paywall')) {
-    return <Redirect href="/(app)/(tabs)" />;
+  const redirect = resolveEntitlementRedirect(entitlement, path);
+  if (redirect) {
+    return <Redirect href={redirect} />;
   }
 
   return <>{children}</>;
