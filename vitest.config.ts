@@ -15,6 +15,9 @@ export default defineConfig({
       'scripts/deploy-safety/**/*.test.ts',
       'scripts/syn05-collector/**/*.test.ts',
     ],
+    // Playwright OAuth E2E runs via `npm run test:oauth-e2e` (serial; shares disposable PG).
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
     environment: 'node',
   },
 });

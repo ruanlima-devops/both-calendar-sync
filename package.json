@@ -36,7 +36,11 @@
     "react-native-worklets": "0.10.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.1",
+    "@types/pg": "^8.23.1",
     "@types/react": "~19.2.2",
+    "pg": "^8.23.1",
+    "playwright": "^1.65.1",
     "typescript": "~6.0.3",
     "vitest": "^4.1.11"
   },
@@ -47,6 +51,9 @@
     "web": "expo start --web",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:oauth-pg": "vitest run --config vitest.oauth-local.config.ts supabase/functions/_shared/oauth.postgres.integration.test.ts",
+    "test:oauth-e2e": "vitest run --config vitest.oauth-local.config.ts e2e/oauth/lifecycle.playwright.test.ts",
+    "test:oauth-local": "vitest run --config vitest.oauth-local.config.ts",
     "typecheck": "tsc --noEmit",
     "check:environment": "node --env-file=.env --experimental-strip-types scripts/check-environment.ts",
     "eas:dev:ios": "eas build --platform ios --profile development",

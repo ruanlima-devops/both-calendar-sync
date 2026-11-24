@@ -294,7 +294,13 @@ See section L. Original PR #15 branch/commits **unchanged**.
 Push gate: feature branch does **not** trigger Deploy STAGE.  
 Draft PR against develop → CI Application + Supabase only.
 
-*(URL filled after open)*
+- **PR Draft:** https://github.com/ruanlima-devops/both-calendar-sync/pull/50  
+- **HEAD:** `6c8fccd4302e01af9990323da5f13142cf9320b3`  
+- **isDraft:** true  
+- **CI:** https://github.com/ruanlima-devops/both-calendar-sync/actions/runs/45414515521  
+- Application: SUCCESS · Supabase: SUCCESS  
+- Workers Builds: FAILURE (not required)  
+- Post-Draft local URL fill only — **not** re-pushed (avoids extra docs commit).
 
 ---
 
@@ -379,8 +385,8 @@ M3_003_DEPLOY_SAFETY=UNKNOWN_BLOCKED
 M3_003_SECURITY_REVIEW=PASS
 M3_003_SOURCE_BRANCH_CREATED=YES
 M3_003_LOCAL_COMMITS=3+
-M3_003_PR_DRAFT=<see GitHub>
-M3_003_REQUIRED_CI=<observe>
+M3_003_PR_DRAFT=https://github.com/ruanlima-devops/both-calendar-sync/pull/50
+M3_003_REQUIRED_CI=PASS
 M3_003_RELEASE_PLAN=CONDITIONAL
 M3_003_PR15_ORIGINAL_PRESERVED=PASS
 M3_003_PR46_PRESERVED=PASS
