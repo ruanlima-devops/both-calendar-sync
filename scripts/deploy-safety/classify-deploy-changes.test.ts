@@ -43,6 +43,27 @@ const PR43_ONBOARDING_PATHS = [
   'lib/onboarding/journey.ts',
 ] as const;
 
+/** Exact changed paths from PR #44 vs develop (HEAD 12f95dd). */
+const PR44_CALENDAR_PATHS = [
+  'app/(app)/(tabs)/calendars.tsx',
+  'app/+not-found.tsx',
+  'lib/calendars/disconnect-confirm.test.ts',
+  'lib/calendars/disconnect-confirm.ts',
+] as const;
+
+/** Exact changed paths from PR #45 vs develop (HEAD 9514845). */
+const PR45_PAYWALL_PATHS = [
+  'app/(app)/_layout.tsx',
+  'app/(app)/paywall.tsx',
+  'lib/billing/entitlement-gate.test.ts',
+  'lib/billing/entitlement-gate.ts',
+  'lib/billing/entitlement.test.ts',
+  'lib/billing/paywall-params.test.ts',
+  'lib/billing/paywall-params.ts',
+  'lib/billing/paywall-scenarios.test.ts',
+  'lib/billing/paywall-scenarios.ts',
+] as const;
+
 const tmpDirs: string[] = [];
 afterEach(() => {
   while (tmpDirs.length) {
@@ -282,7 +303,71 @@ describe('C0.5 classifyDeployChanges', () => {
 
   it('T11n allowlist is exact-set only (count guard against broad expansion)', () => {
     // Guardrail: keep the set intentionally small; bump only with semantic audit.
-    expect(FRONTEND_CLIENT_SAFE_SKIP_EXACT.size).toBe(23);
+    // 23 (#42+#43) + 4 (#44) + 9 (#45) = 36
+    expect(FRONTEND_CLIENT_SAFE_SKIP_EXACT.size).toBe(36);
+  });
+
+  it('T11o PR44 calendar UX exact paths → SAFE_SKIP', () => {
+    for (const p of PR44_CALENDAR_PATHS) {
+      expect(FRONTEND_CLIENT_SAFE_SKIP_EXACT.has(p)).toBe(true);
+    }
+    const r = classifyDeployChanges([...PR44_CALENDAR_PATHS], {
+      contentByPath: Object.fromEntries(PR44_CALENDAR_PATHS.map((p) => [p, 'export const c = 1;\n'])),
+    });
+    expect(r.decision).toBe('SAFE_SKIP');
+    expect(r.run_db).toBe(false);
+    expect(r.run_functions).toBe(false);
+    expect(r.may_skip_remote_deploy).toBe(true);
+    expect(r.matched.other).toEqual([]);
+  });
+
+  it('T11p PR45 paywall UX exact paths → SAFE_SKIP (client-only billing helpers)', () => {
+    for (const p of PR45_PAYWALL_PATHS) {
+      expect(FRONTEND_CLIENT_SAFE_SKIP_EXACT.has(p)).toBe(true);
+    }
+    const r = classifyDeployChanges([...PR45_PAYWALL_PATHS], {
+      contentByPath: Object.fromEntries(PR45_PAYWALL_PATHS.map((p) => [p, 'export const p = 1;\n'])),
+    });
+    expect(r.decision).toBe('SAFE_SKIP');
+    expect(r.run_db).toBe(false);
+    expect(r.run_functions).toBe(false);
+    expect(r.may_skip_remote_deploy).toBe(true);
+  });
+
+  it('T11q no generic lib/billing/** allowlist — sibling stays UNKNOWN', () => {
+    expect(classifyDeployChanges(['lib/billing/client.ts']).decision).toBe('UNKNOWN_BLOCKED');
+    expect(classifyDeployChanges(['lib/billing/purchases.ts']).decision).toBe('UNKNOWN_BLOCKED');
+    expect(classifyDeployChanges(['lib/billing/new-helper.ts']).decision).toBe('UNKNOWN_BLOCKED');
+  });
+
+  it('T11r Stripe secret / service_role content on allowlisted billing path → UNKNOWN', () => {
+    const r = classifyDeployChanges(['lib/billing/paywall-params.ts'], {
+      contentByPath: {
+        'lib/billing/paywall-params.ts': 'const k = "sk_live_example";\n',
+      },
+    });
+    expect(r.decision).toBe('UNKNOWN_BLOCKED');
+    expect(frontendAllowlistContentRejected('whsec_abc')).toBe(true);
+    expect(frontendAllowlistContentRejected('service_role')).toBe(true);
+  });
+
+  it('T11s mixed calendar safe + unknown billing sibling → UNKNOWN_BLOCKED', () => {
+    const r = classifyDeployChanges([
+      'app/(app)/(tabs)/calendars.tsx',
+      'lib/billing/client.ts',
+    ]);
+    expect(r.decision).toBe('UNKNOWN_BLOCKED');
+    expect(r.may_skip_remote_deploy).toBe(false);
+  });
+
+  it('T11t mixed paywall safe + edge function → DEPLOY_CANDIDATE_FUNCTIONS', () => {
+    const r = classifyDeployChanges([
+      'app/(app)/paywall.tsx',
+      'supabase/functions/billing-webhook/index.ts',
+    ]);
+    expect(r.decision).toBe('DEPLOY_CANDIDATE_FUNCTIONS');
+    expect(r.run_functions).toBe(true);
+    expect(r.may_skip_remote_deploy).toBe(false);
   });
 
   it('T12 migrations + functions → DEPLOY_CANDIDATE_BOTH', () => {
