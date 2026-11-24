@@ -48,6 +48,14 @@ describe('entitlement gate routing', () => {
     expect(resolveEntitlementRedirect(restored, '(app)/(tabs)')).toBe('/(app)/paywall');
   });
 
+  it('canceled query alone does not grant access (no entitlement bypass)', () => {
+    const ent = computeEntitlement(expiredSub, new Date('2026-07-20T00:00:00.000Z'));
+    expect(ent.hasAccess).toBe(false);
+    // UI may show checkoutCanceledNotice, but gate still redirects from calendars.
+    expect(resolveEntitlementRedirect(ent, '(app)/(tabs)/calendars')).toBe('/(app)/paywall');
+    expect(shouldShowActiveSubscriptionNotice(ent)).toBe(false);
+  });
+
   it('leaves paywall after active subscription (post-checkout)', () => {
     const ent = computeEntitlement(
       {

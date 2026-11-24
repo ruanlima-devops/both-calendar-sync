@@ -24,4 +24,12 @@ describe('paywall canceled query', () => {
     expect(isCheckoutCanceled(['1'])).toBe(true);
     expect(checkoutCanceledNotice(['1'])).toBe(CHECKOUT_CANCELED_MESSAGE);
   });
+
+  it('rejects malformed / injection-looking params', () => {
+    expect(isCheckoutCanceled('1;drop table')).toBe(false);
+    expect(isCheckoutCanceled('../1')).toBe(false);
+    expect(isCheckoutCanceled('yes ')).toBe(true); // trimmed
+    expect(checkoutCanceledNotice(['0', '1'])).toBeNull(); // first element wins
+    expect(CHECKOUT_CANCELED_MESSAGE).not.toMatch(/token|secret|sk_|Bearer/i);
+  });
 });
