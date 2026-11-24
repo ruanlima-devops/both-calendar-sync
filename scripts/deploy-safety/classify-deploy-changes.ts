@@ -73,7 +73,8 @@ export const SAFE_SKIP_EXACT = new Set([
  * NOT a directory allowlist — new siblings stay UNKNOWN_BLOCKED until audited.
  * APPLICATION_SECURITY_REVIEW remains separate from DEPLOY_TARGET_CLASSIFICATION.
  *
- * Proven by PR #42 (auth web) + PR #43 (onboarding) path audits.
+ * Proven by PR #42 (auth) + #43 (onboarding) + #44 (calendar UX) + #45 (paywall UX) audits.
+ * lib/billing/* entries are client-only helpers (no Edge Function importers); NOT a billing/** prefix.
  */
 export const FRONTEND_CLIENT_SAFE_SKIP_EXACT = new Set([
   // PR #42 — auth web
@@ -101,6 +102,21 @@ export const FRONTEND_CLIENT_SAFE_SKIP_EXACT = new Set([
   'lib/onboarding/calendar-step.ts',
   'lib/onboarding/journey.test.ts',
   'lib/onboarding/journey.ts',
+  // PR #44 — calendar UX (web-safe confirm)
+  'app/(app)/(tabs)/calendars.tsx',
+  'app/+not-found.tsx',
+  'lib/calendars/disconnect-confirm.ts',
+  'lib/calendars/disconnect-confirm.test.ts',
+  // PR #45 — paywall UX (client entitlement gate + canceled notice)
+  'app/(app)/_layout.tsx',
+  'app/(app)/paywall.tsx',
+  'lib/billing/entitlement-gate.ts',
+  'lib/billing/entitlement-gate.test.ts',
+  'lib/billing/entitlement.test.ts',
+  'lib/billing/paywall-params.ts',
+  'lib/billing/paywall-params.test.ts',
+  'lib/billing/paywall-scenarios.ts',
+  'lib/billing/paywall-scenarios.test.ts',
 ]);
 
 /** Reject path traversal / absolute / empty segments before any allowlist match. */
@@ -119,7 +135,7 @@ export function isUnsafePathShape(path: string): boolean {
  * Missing content (deletion / not on disk) is allowed for path-based SAFE_SKIP.
  */
 const FRONTEND_NON_CLIENT_CONTENT =
-  /(?:^|\n)\s*(?:CREATE|ALTER|DROP)\s+(?:TABLE|FUNCTION|POLICY|TYPE|INDEX)\b|supabase\s+functions\s+deploy|\bverify_jwt\s*=/i;
+  /(?:^|\n)\s*(?:CREATE|ALTER|DROP)\s+(?:TABLE|FUNCTION|POLICY|TYPE|INDEX)\b|supabase\s+functions\s+deploy|\bverify_jwt\s*=|\bsk_live_|\bsk_test_|\bwhsec_|\bservice_role\b/i;
 
 export function frontendAllowlistContentRejected(content: string | null | undefined): boolean {
   if (content == null || content === '') return false;
