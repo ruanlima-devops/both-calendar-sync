@@ -68,13 +68,83 @@ export const SAFE_SKIP_EXACT = new Set([
   'docs/STG-07-SYN-05-C0-5-PR-MANIFEST.md',
 ]);
 
+/**
+ * Exact client Expo paths proven (semantic audit) to have no Supabase deploy target.
+ * NOT a directory allowlist — new siblings stay UNKNOWN_BLOCKED until audited.
+ * APPLICATION_SECURITY_REVIEW remains separate from DEPLOY_TARGET_CLASSIFICATION.
+ *
+ * Proven by PR #42 (auth web) + PR #43 (onboarding) path audits.
+ */
+export const FRONTEND_CLIENT_SAFE_SKIP_EXACT = new Set([
+  // PR #42 — auth web
+  'app/(app)/(tabs)/settings.tsx',
+  'app/(auth)/confirm-email.tsx',
+  'app/(auth)/forgot-password.tsx',
+  'app/(auth)/login.tsx',
+  'app/(auth)/sign-up.tsx',
+  'app/auth/update-password.tsx',
+  'components/auth/AuthPasswordField.tsx',
+  'components/auth/AuthPrimaryButton.tsx',
+  'components/auth/AuthTextField.tsx',
+  'lib/auth/email-password.ts',
+  'lib/auth/errors.password.test.ts',
+  'lib/auth/errors.ts',
+  'lib/auth/identity-safety.test.ts',
+  'lib/auth/identity-safety.ts',
+  'lib/auth/password-policy.test.ts',
+  'lib/auth/password-policy.ts',
+  // PR #43 — onboarding
+  'app/(onboarding)/index.tsx',
+  'lib/calendars/lifecycle.test.ts',
+  'lib/calendars/lifecycle.ts',
+  'lib/onboarding/calendar-step.test.ts',
+  'lib/onboarding/calendar-step.ts',
+  'lib/onboarding/journey.test.ts',
+  'lib/onboarding/journey.ts',
+]);
+
+/** Reject path traversal / absolute / empty segments before any allowlist match. */
+export function isUnsafePathShape(path: string): boolean {
+  if (!path || path.includes('\0')) return true;
+  if (path.startsWith('/') || /^[A-Za-z]:/.test(path)) return true;
+  if (path.includes('\\')) return true;
+  const segments = path.split('/');
+  if (segments.some((seg) => seg === '' || seg === '.' || seg === '..')) return true;
+  return false;
+}
+
+/**
+ * Content sniff for exact frontend allowlist only.
+ * Blocks rename-onto-allowlisted-path of SQL/config/deploy markers.
+ * Missing content (deletion / not on disk) is allowed for path-based SAFE_SKIP.
+ */
+const FRONTEND_NON_CLIENT_CONTENT =
+  /(?:^|\n)\s*(?:CREATE|ALTER|DROP)\s+(?:TABLE|FUNCTION|POLICY|TYPE|INDEX)\b|supabase\s+functions\s+deploy|\bverify_jwt\s*=/i;
+
+export function frontendAllowlistContentRejected(content: string | null | undefined): boolean {
+  if (content == null || content === '') return false;
+  return FRONTEND_NON_CLIENT_CONTENT.test(content);
+}
+
 function normalize(p: string): string {
   return p.replace(/^\.\//, '').replace(/\\/g, '/');
 }
 
-function isSafeSkip(path: string): boolean {
+function isLegacySafeSkip(path: string): boolean {
   if (SAFE_SKIP_EXACT.has(path)) return true;
   return SAFE_SKIP_PREFIXES.some((prefix) => path.startsWith(prefix));
+}
+
+function isFrontendClientSafeSkip(path: string, options?: ClassifyOptions): boolean {
+  if (!FRONTEND_CLIENT_SAFE_SKIP_EXACT.has(path)) return false;
+  const content = readPathContent(path, options);
+  if (frontendAllowlistContentRejected(content)) return false;
+  return true;
+}
+
+function isSafeSkip(path: string, options?: ClassifyOptions): boolean {
+  if (isLegacySafeSkip(path)) return true;
+  return isFrontendClientSafeSkip(path, options);
 }
 
 function readPathContent(path: string, options?: ClassifyOptions): string | null {
@@ -123,6 +193,12 @@ export function classifyDeployChanges(
   const inertReasons: string[] = [];
 
   for (const path of paths) {
+    // Fail-closed on traversal / absolute / empty segments before any allowlist.
+    if (isUnsafePathShape(path)) {
+      matched.other.push(path);
+      continue;
+    }
+
     // Exact-path allowlist for inert delivery workflow (never by prefix/rename).
     if (path === INERT_DELIVERY_WORKFLOW_PATH) {
       inertDeliverySeen = true;
@@ -183,8 +259,13 @@ export function classifyDeployChanges(
       continue;
     }
 
-    if (isSafeSkip(path)) {
+    if (isSafeSkip(path, options)) {
       matched.safe_skip.push(path);
+      continue;
+    }
+    // Exact frontend path with rejected content (e.g. SQL renamed onto allowlist) → other.
+    if (FRONTEND_CLIENT_SAFE_SKIP_EXACT.has(path)) {
+      matched.other.push(path);
       continue;
     }
     if (
