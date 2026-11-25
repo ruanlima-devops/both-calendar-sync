@@ -6,7 +6,7 @@
 **PR:** [#50](https://github.com/ruanlima-devops/both-calendar-sync/pull/50) DRAFT  
 **Branch:** `feat/m3-003-oauth-lifecycle-reconciled`  
 **Worktree:** `/Users/ruan/Documents/work12-m3-003-oauth-reconciliation`  
-**HEAD final:** `8828c4b517960bfac074a2a599f8ab10f7a3b175`  
+**HEAD final:** `9d7d718da6baf711382166838d78a15e43dc881d` (alinhamento docs; se houver commit posterior só de stamp, usar `git rev-parse HEAD`)  
 **Functional commit (GoTrue E2E):** `22a23c57a66a2e9cc37d65428b8389e95f952085`  
 **develop:** `383adb8b902a40f8ecfd30c7e9acfafd49b7ab34`
 
@@ -125,7 +125,7 @@ Auth Web / Onboarding / Calendar / Paywall / Billing client / Sync Core (incl. S
 ### Commits
 | SHA | Mensagem |
 |---|---|
-| `8828c4b` | `docs(m3): stamp overnight audit with CI and final independent revalidation` |
+| `9d7d718` / `dd4ca1d` | stamps de auditoria overnight + CI URLs |
 | `22a23c5` | `test(m3): recover GoTrue locally and certify OAuth JWT E2E` |
 | `d156faa` | `test(m3): local Postgres + Playwright OAuth lifecycle validation` (pré-sprint) |
 | `6c8fccd` | `docs(m3): certify OAuth lifecycle reconciliation onto develop post-#45` (pré-sprint) |
@@ -158,9 +158,10 @@ Auth Web / Onboarding / Calendar / Paywall / Billing client / Sync Core (incl. S
 | Item | Status |
 |---|---|
 | PR #50 | OPEN + **DRAFT** — https://github.com/ruanlima-devops/both-calendar-sync/pull/50 |
-| HEAD | `8828c4b517960bfac074a2a599f8ab10f7a3b175` |
-| CI run (HEAD) | https://github.com/ruanlima-devops/both-calendar-sync/actions/runs/45554371611 |
-| CI run (GoTrue E2E) | https://github.com/ruanlima-devops/both-calendar-sync/actions/runs/45553660768 |
+| HEAD | `9d7d718da6baf711382166838d78a15e43dc881d` (+ commit docs de alinhamento se aplicável) |
+| CI run (docs stamp) | https://github.com/ruanlima-devops/both-calendar-sync/actions/runs/45554371611 (`dd4ca1d`) |
+| CI run (GoTrue E2E) | https://github.com/ruanlima-devops/both-calendar-sync/actions/runs/45553660768 (`22a23c5`) |
+| CI run (HEAD align) | https://github.com/ruanlima-devops/both-calendar-sync/actions/runs/45554693418 (`9d7d718`) |
 | Application | **SUCCESS** (required) |
 | Supabase | **SUCCESS** (required) |
 | Workers Builds stage | **FAILURE** (não-required; sem deploy autorizado / Cloudflare stage) |
@@ -178,13 +179,13 @@ Auth Web / Onboarding / Calendar / Paywall / Billing client / Sync Core (incl. S
 
 ---
 
-## 26–30. Auditoria final independente (HEAD `8828c4b` / funcional `22a23c5`)
+## 26–30. Auditoria final independente (HEAD `9d7d718` / funcional `22a23c5`)
 
 Reexecutado a partir do HEAD funcional e revalidado após stamp de docs (não apenas relatório anterior):
 
 | Check | Evidência | Resultado |
 |---|---|---|
-| Git clean / tracking | branch sync com origin `8828c4b` | PASS |
+| Git clean / tracking | branch sync com origin pós-`9d7d718` | PASS |
 | GoTrue real | health + 6 testes integração | PASS |
 | OAuth local harness | 27/27 | PASS |
 | Vitest full | 750/750 | PASS |
