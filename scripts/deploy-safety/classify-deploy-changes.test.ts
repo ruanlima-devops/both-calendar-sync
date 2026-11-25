@@ -64,6 +64,18 @@ const PR45_PAYWALL_PATHS = [
   'lib/billing/paywall-scenarios.ts',
 ] as const;
 
+/** Exact OAuth *client* paths from PR #50 (Edge Functions / migration stay deployable). */
+const PR50_OAUTH_CLIENT_PATHS = [
+  'app/oauth.tsx',
+  'context/session.tsx',
+  'lib/auth/routing.ts',
+  'lib/auth/routing.test.ts',
+  'lib/errors.ts',
+  'lib/oauth.ts',
+  'lib/oauth-complete.ts',
+  'lib/oauth-complete.test.ts',
+] as const;
+
 const tmpDirs: string[] = [];
 afterEach(() => {
   while (tmpDirs.length) {
@@ -213,7 +225,7 @@ describe('C0.5 classifyDeployChanges', () => {
       'components/ui/Button.tsx',
       'lib/supabase.ts',
       'lib/billing/client.ts',
-      'lib/oauth.ts',
+      'lib/oauth-extra.ts',
     ]) {
       const r = classifyDeployChanges([p]);
       expect(r.decision).toBe('UNKNOWN_BLOCKED');
@@ -303,8 +315,8 @@ describe('C0.5 classifyDeployChanges', () => {
 
   it('T11n allowlist is exact-set only (count guard against broad expansion)', () => {
     // Guardrail: keep the set intentionally small; bump only with semantic audit.
-    // 23 (#42+#43) + 4 (#44) + 9 (#45) = 36
-    expect(FRONTEND_CLIENT_SAFE_SKIP_EXACT.size).toBe(36);
+    // 23 (#42+#43) + 4 (#44) + 9 (#45) + 8 (#50 oauth client) = 44
+    expect(FRONTEND_CLIENT_SAFE_SKIP_EXACT.size).toBe(44);
   });
 
   it('T11o PR44 calendar UX exact paths → SAFE_SKIP', () => {
@@ -338,6 +350,47 @@ describe('C0.5 classifyDeployChanges', () => {
     expect(classifyDeployChanges(['lib/billing/client.ts']).decision).toBe('UNKNOWN_BLOCKED');
     expect(classifyDeployChanges(['lib/billing/purchases.ts']).decision).toBe('UNKNOWN_BLOCKED');
     expect(classifyDeployChanges(['lib/billing/new-helper.ts']).decision).toBe('UNKNOWN_BLOCKED');
+  });
+
+  it('T11q2 PR50 OAuth client exact paths → SAFE_SKIP; lib/oauth sibling stays UNKNOWN', () => {
+    for (const p of PR50_OAUTH_CLIENT_PATHS) {
+      expect(FRONTEND_CLIENT_SAFE_SKIP_EXACT.has(p)).toBe(true);
+    }
+    const r = classifyDeployChanges([...PR50_OAUTH_CLIENT_PATHS], {
+      contentByPath: Object.fromEntries(PR50_OAUTH_CLIENT_PATHS.map((p) => [p, 'export const o = 1;\n'])),
+    });
+    expect(r.decision).toBe('SAFE_SKIP');
+    expect(r.may_skip_remote_deploy).toBe(true);
+    expect(classifyDeployChanges(['lib/oauth-server.ts']).decision).toBe('UNKNOWN_BLOCKED');
+    expect(classifyDeployChanges(['app/oauth-admin.tsx']).decision).toBe('UNKNOWN_BLOCKED');
+  });
+
+  it('T11q3 PR50 client + migration + functions → DEPLOY_CANDIDATE_BOTH (not UNKNOWN)', () => {
+    const paths = [
+      ...PR50_OAUTH_CLIENT_PATHS,
+      'supabase/migrations/20261001000001_oauth_completion_ticket.sql',
+      'supabase/functions/google-oauth/index.ts',
+      'supabase/functions/microsoft-oauth/index.ts',
+      'supabase/functions/_shared/oauth.ts',
+      'scripts/oauth-local/schema.sql',
+      'e2e/oauth/lifecycle.playwright.test.ts',
+      'wrangler.jsonc',
+      '.gitignore',
+    ];
+    const r = classifyDeployChanges(paths, {
+      contentByPath: Object.fromEntries([
+        ...PR50_OAUTH_CLIENT_PATHS.map((p) => [p, 'export const o = 1;\n'] as const),
+        ['wrangler.jsonc', '{ "name": "both-calendar-sync-stage" }\n'],
+        ['.gitignore', 'node_modules/\n'],
+        ['scripts/oauth-local/schema.sql', '-- local only\n'],
+        ['e2e/oauth/lifecycle.playwright.test.ts', 'export {}\n'],
+      ]),
+    });
+    expect(r.decision).toBe('DEPLOY_CANDIDATE_BOTH');
+    expect(r.run_db).toBe(true);
+    expect(r.run_functions).toBe(true);
+    expect(r.may_skip_remote_deploy).toBe(false);
+    expect(r.matched.other).toEqual([]);
   });
 
   it('T11r Stripe secret / service_role content on allowlisted billing path → UNKNOWN', () => {
