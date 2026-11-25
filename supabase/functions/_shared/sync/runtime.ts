@@ -12,6 +12,7 @@ import { persistCalendarNotification } from '../notifications/store.ts';
 import { googleFullSyncWindow } from './dates.ts';
 import { applyIncomingEvent, createOriginWithOptionalMirrors } from './engine.ts';
 import { PostgresStore } from './postgres-store.ts';
+import { shouldKeepActiveWatch } from './watch-policy.ts';
 import type {
   CalendarProvider,
   CreateEventInput,
@@ -751,18 +752,23 @@ export async function ensureWebhook(db: SupabaseClient, calendarId: string): Pro
     logSafe(`${watchLog(ctx.provider)} skipped_auth_required`, { calendarId });
     return;
   }
-  const horizon = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
   const { data: current } = await db
     .from('webhook_subscriptions')
     .select('*')
     .eq('connected_calendar_id', calendarId)
     .eq('status', 'active')
     .maybeSingle();
-  if (current && new Date(current.expires_at) > new Date(horizon)) {
-    if (ctx.provider === 'MICROSOFT' || current.last_notification_at) {
-      logSafe(`${watchLog(ctx.provider)} already_active`, { calendarId, expiresAt: current.expires_at });
-      return;
-    }
+  if (
+    current &&
+    shouldKeepActiveWatch({
+      provider: ctx.provider,
+      expiresAt: current.expires_at,
+      createdAt: current.created_at,
+      lastNotificationAt: current.last_notification_at,
+    })
+  ) {
+    logSafe(`${watchLog(ctx.provider)} already_active`, { calendarId, expiresAt: current.expires_at });
+    return;
   }
 
   const { accessToken, provider } = await getValidAccessToken(db, ctx.connectionId);

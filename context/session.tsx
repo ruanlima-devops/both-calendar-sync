@@ -6,12 +6,13 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
 import { AppState, Platform } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
-import type { AuthStatus } from '@/lib/auth/routing';
+import { authEventNeedsProfileReload, type AuthStatus } from '@/lib/auth/routing';
 import { supabase } from '@/lib/supabase';
 import {
   resolveColorScheme,
@@ -50,6 +51,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [profileReady, setProfileReady] = useState(false);
+  const readyUserId = useRef<string | null>(null);
   const systemScheme = usePreferredColorScheme();
 
   const refreshProfile = useCallback(async (userId?: string) => {
@@ -74,6 +76,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setProfile(null);
       }
       if (active) {
+        readyUserId.current = data.session?.user.id ?? null;
         setProfileReady(true);
         setLoading(false);
       }
@@ -86,6 +89,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setTimeout(() => {
         setSession(next);
         if (!next) {
+          readyUserId.current = null;
           setProfile(null);
           setProfileReady(true);
           return;
@@ -96,9 +100,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           void supabase.from('profiles').update({ timezone, locale }).eq('id', next.user.id);
         }
         if (event === 'TOKEN_REFRESHED') return;
+        const userId = next.user.id;
+        if (!authEventNeedsProfileReload(event, userId, readyUserId.current)) {
+          void fetchProfile(userId).then((row) => {
+            if (active && row) setProfile(row);
+          });
+          return;
+        }
         setProfileReady(false);
-        void fetchProfile(next.user.id).then((row) => {
+        void fetchProfile(userId).then((row) => {
           if (!active) return;
+          readyUserId.current = userId;
           setProfile(row);
           setProfileReady(true);
         });
