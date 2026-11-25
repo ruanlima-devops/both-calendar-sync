@@ -258,7 +258,13 @@ Secrets: existing TOKEN_ENCRYPTION_KEY / provider secrets (verify only; not rota
 
 ## Z. PR update and CI
 
-*(filled after push)*
+- HEAD: `d156faa86ac8f98fde6f4a43949f119d9cfdf151`
+- Draft: **YES** (unchanged)
+- URL: https://github.com/ruanlima-devops/both-calendar-sync/pull/50
+- CI: https://github.com/ruanlima-devops/both-calendar-sync/actions/runs/45477255439
+- Application SUCCESS · Supabase SUCCESS
+- Workers Builds FAILURE (not required)
+- PR #15 HEAD unchanged: `78979549…`
 
 ---
 
@@ -296,8 +302,8 @@ M3_003_DEPLOY_SAFETY_ANALYSIS=PASS
 M3_003_RELEASE_IMPACT_MATRIX=PASS
 M3_003_RELEASE_PLAN=CONDITIONAL
 M3_003_PUSH_GATE=PASS
-M3_003_PR50_UPDATED=<pending>
-M3_003_PR50_CI=<pending>
+M3_003_PR50_UPDATED=YES
+M3_003_PR50_CI=PASS
 M3_003_PR15_PRESERVED=PASS
 M3_003_PR46_PRESERVED=PASS
 M3_003_ISSUES_PRESERVED=PASS

@@ -1,10 +1,9 @@
 /**
  * Local-only OAuth HTTP shim for Playwright E2E.
- * Uses real oauth helpers + disposable Postgres. JWT gate simulated via Authorization: Bearer <userId>.
+ * Uses real oauth helpers + disposable Postgres + GoTrue JWT validation via /user.
  * Never bind to non-loopback. Never use remote DB.
  */
 import http from 'node:http';
-import { randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import { createPgDb, localPgUrl, type PgHarness } from '../../supabase/functions/_shared/testing/pg-db.ts';
 import { stubDenoEnv } from '../../supabase/functions/_shared/testing/fake-db.ts';
@@ -15,6 +14,7 @@ import {
   handleOAuthCallback,
   type OAuthProvider,
 } from '../../supabase/functions/_shared/oauth.ts';
+import { userFromAccessToken, type GoTrueSession } from './gotrue-client.ts';
 
 const KEY = Buffer.from(new Uint8Array(32).fill(7)).toString('base64');
 const APP = 'http://127.0.0.1:8791/oauth';
@@ -24,7 +24,14 @@ export type LocalOAuthShim = {
   harness: PgHarness;
   userA: string;
   userB: string;
+  tokenA: string;
+  tokenB: string;
   close: () => Promise<void>;
+};
+
+export type ShimUsers = {
+  sessionA: GoTrueSession;
+  sessionB: GoTrueSession;
 };
 
 function json(res: http.ServerResponse, status: number, body: unknown) {
@@ -46,32 +53,39 @@ function readBody(req: http.IncomingMessage): Promise<Record<string, unknown>> {
   });
 }
 
-function userFromAuth(req: http.IncomingMessage): string | null {
+async function userFromAuth(req: http.IncomingMessage): Promise<string | null> {
   const h = req.headers.authorization;
   if (!h?.startsWith('Bearer ')) return null;
   const token = h.slice('Bearer '.length).trim();
-  // Local shim only: Bearer carries synthetic user UUID (stand-in for Auth JWT subject).
-  if (!/^[0-9a-f-]{36}$/i.test(token)) return null;
-  return token;
+  if (!token || token.split('.').length < 3) return null; // require JWT shape
+  const user = await userFromAccessToken(token);
+  return user?.id ?? null;
 }
 
-export async function startLocalOAuthShim(mockProviderBase: string): Promise<LocalOAuthShim> {
+export async function startLocalOAuthShim(
+  mockProviderBase: string,
+  users: ShimUsers,
+): Promise<LocalOAuthShim> {
   const url = localPgUrl();
   if (!url) throw new Error('OAUTH_LOCAL_DATABASE_URL required');
   stubDenoEnv({ APP_URL: 'http://127.0.0.1:8791' });
   const harness = createPgDb(url);
   await harness.resetOAuthTables();
-  const userA = randomUUID();
-  const userB = randomUUID();
-  await harness.pool.query('INSERT INTO public.profiles (id) VALUES ($1), ($2)', [userA, userB]);
+  const userA = users.sessionA.userId;
+  const userB = users.sessionB.userId;
+  await harness.pool.query('INSERT INTO public.profiles (id, display_name) VALUES ($1,$2), ($3,$4)', [
+    userA,
+    users.sessionA.email,
+    userB,
+    users.sessionB.email,
+  ]);
 
   const server = http.createServer(async (req, res) => {
     const u = new URL(req.url || '/', 'http://127.0.0.1');
     try {
-      if (u.pathname === '/health') return json(res, 200, { ok: true });
+      if (u.pathname === '/health') return json(res, 200, { ok: true, auth: 'gotrue' });
 
       if (u.pathname === '/oauth' && req.method === 'GET') {
-        // Simulated popup/callback landing page for Playwright.
         const ticket = u.searchParams.get('oauth_ticket');
         const err = u.searchParams.get('oauth_error') || u.searchParams.get('error');
         const provider = u.searchParams.get('provider') || '';
@@ -86,7 +100,7 @@ export async function startLocalOAuthShim(mockProviderBase: string): Promise<Loc
       }
 
       if (u.pathname === '/start' && req.method === 'POST') {
-        const userId = userFromAuth(req);
+        const userId = await userFromAuth(req);
         if (!userId) return json(res, 401, { error: 'unauthorized' });
         const body = await readBody(req);
         const provider = String(body.provider || 'GOOGLE').toUpperCase() as OAuthProvider;
@@ -105,11 +119,12 @@ export async function startLocalOAuthShim(mockProviderBase: string): Promise<Loc
 
       if (u.pathname === '/callback' && req.method === 'GET') {
         const providerParam = u.searchParams.get('provider');
-        // Infer provider from state row when mock omits it.
         let provider: OAuthProvider = providerParam === 'microsoft' ? 'MICROSOFT' : 'GOOGLE';
         const state = u.searchParams.get('state') || '';
         if (state) {
-          const { rows } = await harness.pool.query('SELECT provider FROM public.oauth_states WHERE state = $1', [state]);
+          const { rows } = await harness.pool.query('SELECT provider FROM public.oauth_states WHERE state = $1', [
+            state,
+          ]);
           if (rows[0]?.provider === 'MICROSOFT' || rows[0]?.provider === 'GOOGLE') {
             provider = rows[0].provider;
           }
@@ -124,7 +139,6 @@ export async function startLocalOAuthShim(mockProviderBase: string): Promise<Loc
           encryptionKey: KEY,
         });
         const location = response.headers.get('Location') || '/oauth';
-        // Rewrite redirect host to this shim's /oauth landing.
         const loc = new URL(location, `http://127.0.0.1`);
         const port = (server.address() as AddressInfo).port;
         const local = new URL(`http://127.0.0.1:${port}/oauth`);
@@ -135,7 +149,7 @@ export async function startLocalOAuthShim(mockProviderBase: string): Promise<Loc
       }
 
       if (u.pathname === '/finalize' && req.method === 'POST') {
-        const userId = userFromAuth(req);
+        const userId = await userFromAuth(req);
         if (!userId) return json(res, 401, { error: 'unauthorized' });
         const body = await readBody(req);
         const provider = String(body.provider || 'GOOGLE').toUpperCase() as OAuthProvider;
@@ -154,7 +168,7 @@ export async function startLocalOAuthShim(mockProviderBase: string): Promise<Loc
       }
 
       if (u.pathname === '/connections' && req.method === 'GET') {
-        const userId = userFromAuth(req);
+        const userId = await userFromAuth(req);
         if (!userId) return json(res, 401, { error: 'unauthorized' });
         const { rows } = await harness.pool.query(
           'SELECT id, provider, status, account_email FROM public.calendar_connections WHERE user_id = $1',
@@ -176,6 +190,8 @@ export async function startLocalOAuthShim(mockProviderBase: string): Promise<Loc
     harness,
     userA,
     userB,
+    tokenA: users.sessionA.accessToken,
+    tokenB: users.sessionB.accessToken,
     close: async () => {
       await new Promise<void>((resolve, reject) => server.close((e) => (e ? reject(e) : resolve())));
       await harness.end();

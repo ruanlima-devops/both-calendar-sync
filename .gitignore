@@ -44,3 +44,7 @@ supabase/.temp/
 # generated native folders
 /ios
 /android
+
+scripts/oauth-local/.env.gotrue
+.tools/
+

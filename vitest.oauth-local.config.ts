@@ -10,7 +10,8 @@ export default defineConfig({
   test: {
     include: [
       'supabase/functions/_shared/oauth.postgres.integration.test.ts',
-      'e2e/oauth/**/*.test.ts',
+      'e2e/oauth/gotrue.integration.test.ts',
+      'e2e/oauth/lifecycle.playwright.test.ts',
     ],
     fileParallelism: false,
     testTimeout: 60_000,
