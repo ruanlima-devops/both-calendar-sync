@@ -1,3 +1,4 @@
+// STAGE redeploy marker: post-#50 migration history sync (OAuth functions).
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { encryptSecret } from '../_shared/crypto/tokens.ts';
 import { adminClient, handle, json, userFromRequest } from '../_shared/function.ts';

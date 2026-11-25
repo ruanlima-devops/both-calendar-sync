@@ -1,3 +1,4 @@
+// STAGE redeploy marker: post-#50 migration history sync (OAuth functions).
 import { adminClient, handle, json, userFromRequest } from '../_shared/function.ts';
 import { disconnectConnection } from '../_shared/account/disconnect.ts';
 import { AccountDeleteBlockedError } from '../_shared/account/oauth-revoke.ts';
