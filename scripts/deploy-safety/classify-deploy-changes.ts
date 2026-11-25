@@ -54,7 +54,14 @@ export type ClassifyOptions = {
   contentByPath?: Record<string, string | null | undefined>;
 };
 
-export const SAFE_SKIP_PREFIXES = ['scripts/syn05-watchdog/', 'docs/', 'scripts/deploy-safety/'] as const;
+export const SAFE_SKIP_PREFIXES = [
+  'scripts/syn05-watchdog/',
+  'docs/',
+  'scripts/deploy-safety/',
+  // Local OAuth harness only (Postgres/GoTrue/Playwright) — never a STAGE deploy target.
+  'scripts/oauth-local/',
+  'e2e/oauth/',
+] as const;
 
 export const SAFE_SKIP_EXACT = new Set([
   '.github/workflows/both-stage-watchdog.yml',
@@ -62,7 +69,11 @@ export const SAFE_SKIP_EXACT = new Set([
   'supabase/functions/_shared/observability/alert-evaluator.ts',
   'supabase/functions/_shared/observability/alert-evaluator.test.ts',
   'vitest.config.ts',
+  'vitest.oauth-local.config.ts',
   'tsconfig.json',
+  '.gitignore',
+  // Cloudflare Workers Builds config for STAGE web (not Supabase Deploy STAGE).
+  'wrangler.jsonc',
   'docs/STG-07-SYN-05-C0-5-DEPLOY-SAFETY-INTEGRATION.md',
   'docs/STG-07-SYN-05-C0-5-BOOTSTRAP-SAFETY.md',
   'docs/STG-07-SYN-05-C0-5-PR-MANIFEST.md',
@@ -73,8 +84,9 @@ export const SAFE_SKIP_EXACT = new Set([
  * NOT a directory allowlist — new siblings stay UNKNOWN_BLOCKED until audited.
  * APPLICATION_SECURITY_REVIEW remains separate from DEPLOY_TARGET_CLASSIFICATION.
  *
- * Proven by PR #42 (auth) + #43 (onboarding) + #44 (calendar UX) + #45 (paywall UX) audits.
- * lib/billing/* entries are client-only helpers (no Edge Function importers); NOT a billing/** prefix.
+ * Proven by PR #42 (auth) + #43 (onboarding) + #44 (calendar UX) + #45 (paywall UX)
+ * + PR #50 OAuth client audit (ticket/nonce helpers; no Edge Function importers).
+ * lib/billing/* and lib/oauth* entries are client-only helpers; NOT lib/** prefixes.
  */
 export const FRONTEND_CLIENT_SAFE_SKIP_EXACT = new Set([
   // PR #42 — auth web
@@ -117,6 +129,15 @@ export const FRONTEND_CLIENT_SAFE_SKIP_EXACT = new Set([
   'lib/billing/paywall-params.test.ts',
   'lib/billing/paywall-scenarios.ts',
   'lib/billing/paywall-scenarios.test.ts',
+  // PR #50 — OAuth lifecycle client (completion ticket UX; Edge Functions remain DEPLOY_CANDIDATE)
+  'app/oauth.tsx',
+  'context/session.tsx',
+  'lib/auth/routing.ts',
+  'lib/auth/routing.test.ts',
+  'lib/errors.ts',
+  'lib/oauth.ts',
+  'lib/oauth-complete.ts',
+  'lib/oauth-complete.test.ts',
 ]);
 
 /** Reject path traversal / absolute / empty segments before any allowlist match. */
