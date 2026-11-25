@@ -1,4 +1,9 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
+import {
+  ensureStripeCanceledForAccountDelete,
+  type CancelBeforeDeleteResult,
+  type StripeBillingGateway,
+} from '../billing/cancel-before-delete.ts';
 import { decryptSecret } from '../crypto/tokens.ts';
 import { logSafe } from '../http.ts';
 import { getValidAccessToken, providerFor } from '../sync/runtime.ts';
@@ -17,18 +22,23 @@ export type DeleteAccountResult = {
   connectionsCleaned: number;
   jobsCancelled: number;
   authDeleted: boolean;
+  billing: CancelBeforeDeleteResult;
 };
 
 export type DeleteAccountDeps = {
   getAccessToken?: typeof getValidAccessToken;
   revoke?: typeof revokeProviderAuthorization;
   providerForFn?: typeof providerFor;
+  stripe?: StripeBillingGateway;
+  /** Ignored — present only to prove client injection cannot drive cancel targets. */
+  clientSubscriptionId?: unknown;
 };
 
 /**
  * Full Both account deletion for the authenticated userId (never from client body).
  * Idempotent where possible: missing external resources continue cleanup.
  * Transient failures stopping watches/subscriptions ABORT before credentials are destroyed.
+ * BIL-05: Stripe chargeable subscriptions must be canceled/confirmed before irreversible delete.
  */
 export async function deleteUserAccount(
   db: SupabaseClient,
@@ -39,6 +49,12 @@ export async function deleteUserAccount(
   const getAccessToken = deps.getAccessToken ?? getValidAccessToken;
   const revoke = deps.revoke ?? revokeProviderAuthorization;
   const resolveProvider = deps.providerForFn ?? providerFor;
+
+  // 0) BIL-05 — cancel/confirm Stripe before destroying financial linkage / auth.
+  const billing = await ensureStripeCanceledForAccountDelete(db, userId, {
+    stripe: deps.stripe,
+    clientSubscriptionId: deps.clientSubscriptionId,
+  });
 
   // 1) Stop new / in-flight work for this user.
   const { data: openJobs } = await db
@@ -108,6 +124,7 @@ export async function deleteUserAccount(
     connectionsCleaned: (connections ?? []).length,
     jobsCancelled: jobIds.length,
     authDeleted,
+    billingOutcome: billing.outcome,
   });
 
   return {
@@ -115,6 +132,7 @@ export async function deleteUserAccount(
     connectionsCleaned: (connections ?? []).length,
     jobsCancelled: jobIds.length,
     authDeleted,
+    billing,
   };
 }
 
