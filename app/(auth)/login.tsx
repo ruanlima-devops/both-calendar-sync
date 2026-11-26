@@ -143,7 +143,12 @@ export default function LoginScreen() {
             onPress={() => void onApple()}
           />
         ) : null}
-        <GoogleSignInButton colors={colors} busy={busy} onPress={() => void signIn()} />
+        <GoogleSignInButton
+          colors={colors}
+          busy={googleBusy}
+          disabled={busy}
+          onPress={() => void signIn()}
+        />
 
         <Text style={[styles.signup, { color: colors.muted }]}>
           Ainda não tem uma conta?{' '}
