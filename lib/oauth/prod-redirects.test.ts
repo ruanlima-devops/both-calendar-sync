@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  PROD_FRONTEND_HOST,
   PROD_SUPABASE_REF,
+  PROD_TARGET_SUPABASE_ORG,
+  STAGE_SUPABASE_ORG,
   prodBrandedRedirectInventory,
   prodTechnicalRedirectInventory,
   supabaseAuthCallback,
@@ -12,6 +15,13 @@ describe('prod OAuth redirect inventory', () => {
     expect(PROD_SUPABASE_REF).toBe('djxulqyuafhihmuyzvvk');
     expect(PROD_SUPABASE_REF).not.toBe('qszggrrjhcwltnmxpxcy');
     expect(PROD_SUPABASE_REF).not.toBe('sknpqjodttkpttaytdut');
+  });
+
+  it('pins Scenario C org ids (STAGE Free vs PROD target)', () => {
+    expect(STAGE_SUPABASE_ORG).toBe('otaqdspnjsewiymnqbmr');
+    expect(PROD_TARGET_SUPABASE_ORG).toBe('ufxaefwnhwzxafvajsfg');
+    expect(PROD_TARGET_SUPABASE_ORG).not.toBe(STAGE_SUPABASE_ORG);
+    expect(PROD_FRONTEND_HOST).toBe('https://app.bothcalendar.com');
   });
 
   it('builds technical Sign-In and Calendar callbacks from source function names', () => {

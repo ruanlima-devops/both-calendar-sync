@@ -43,5 +43,5 @@ Least privilege relative to product need; do not add Mail/Files.
 
 1. Identify / create Both-owned Entra tenant (or company Azure AD).
 2. Grant agent or ops admin consent to create app registrations.
-3. Decide Partner Center entity (RUAN FELIPE SERAFIM DE LIMA LTDA vs future Both company).
-4. Approve publisher verification submission when ready.
+3. Partner Center entity: **RUAN FELIPE SERAFIM DE LIMA LTDA** (PO APPROVED). Confirm CNPJ via Receita before forms (`LEGAL_DOCUMENT_VERIFICATION=PENDING`).
+4. Approve publisher verification **submission** when ready (`PROVIDER_VERIFICATION` still PENDING).
