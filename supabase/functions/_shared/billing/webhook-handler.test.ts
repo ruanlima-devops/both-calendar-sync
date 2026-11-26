@@ -273,6 +273,118 @@ describe('processStripeEvent', () => {
     expect(tables.user_subscriptions[0]?.billing_subscription_id).toBeNull();
   });
 
+  it('persists cancel_at_period_end from subscription.updated', async () => {
+    const { db, tables } = createFakeDb({
+      profiles: [profileA],
+      user_subscriptions: [subRow({ status: 'active', cancel_at_period_end: false })],
+      billing_events: [],
+      calendar_connections: [],
+    });
+
+    const result = await processStripeEvent(db, {
+      id: 'evt_cancel_period',
+      type: 'customer.subscription.updated',
+      created: 1_700_002_000,
+      data: {
+        object: {
+          id: 'sub_A',
+          customer: 'cus_A',
+          status: 'active',
+          cancel_at_period_end: true,
+          current_period_end: 1_766_707_200,
+          metadata: { user_id: USER_A },
+        },
+      },
+    });
+    expect(result).toEqual({ ok: true });
+    expect(tables.user_subscriptions[0]?.cancel_at_period_end).toBe(true);
+    expect(tables.user_subscriptions[0]?.status).toBe('active');
+  });
+
+  it('infers cancel_at_period_end from cancel_at when boolean omitted', async () => {
+    const { db, tables } = createFakeDb({
+      profiles: [profileA],
+      user_subscriptions: [subRow({ status: 'active', cancel_at_period_end: false })],
+      billing_events: [],
+      calendar_connections: [],
+    });
+
+    const result = await processStripeEvent(db, {
+      id: 'evt_cancel_at_only',
+      type: 'customer.subscription.updated',
+      created: 1_700_002_100,
+      data: {
+        object: {
+          id: 'sub_A',
+          customer: 'cus_A',
+          status: 'active',
+          cancel_at: 1_766_707_200,
+          metadata: { user_id: USER_A },
+        },
+      },
+    });
+    expect(result).toEqual({ ok: true });
+    expect(tables.user_subscriptions[0]?.cancel_at_period_end).toBe(true);
+  });
+
+  it('checkout.session.completed without Stripe expand preserves existing cancel_at_period_end', async () => {
+    const { db, tables } = createFakeDb({
+      profiles: [profileA],
+      user_subscriptions: [
+        subRow({
+          status: 'active',
+          cancel_at_period_end: true,
+          billing_customer_id: 'cus_A',
+          billing_subscription_id: 'sub_A',
+        }),
+      ],
+      billing_events: [],
+      product_events: [],
+      calendar_connections: [],
+    });
+
+    const result = await processStripeEvent(db, {
+      id: 'evt_checkout_after',
+      type: 'checkout.session.completed',
+      created: 1_700_003_000,
+      data: {
+        object: {
+          customer: 'cus_A',
+          subscription: 'sub_A',
+          metadata: { user_id: USER_A },
+        },
+      },
+    });
+    expect(result).toEqual({ ok: true });
+    expect(tables.user_subscriptions[0]?.status).toBe('active');
+    expect(tables.user_subscriptions[0]?.cancel_at_period_end).toBe(true);
+  });
+
+  it('thin subscription.updated without cancel fields preserves cancel_at_period_end', async () => {
+    const { db, tables } = createFakeDb({
+      profiles: [profileA],
+      user_subscriptions: [subRow({ status: 'active', cancel_at_period_end: true })],
+      billing_events: [],
+      calendar_connections: [],
+    });
+
+    const result = await processStripeEvent(db, {
+      id: 'evt_thin_update',
+      type: 'customer.subscription.updated',
+      created: 1_700_003_100,
+      data: {
+        object: {
+          id: 'sub_A',
+          customer: 'cus_A',
+          status: 'active',
+          metadata: { user_id: USER_A },
+        },
+      },
+    });
+    expect(result).toEqual({ ok: true });
+    expect(tables.user_subscriptions[0]?.cancel_at_period_end).toBe(true);
+  });
+
   it('applies subscription.updated and ignores stale older event (out of order)', async () => {
     const { db, tables } = createFakeDb({
       profiles: [profileA],
