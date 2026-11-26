@@ -62,6 +62,11 @@ jobs:
               exit 1
               ;;
           esac
+          # Verified dashboard ref 2026-11-26 (Both PROD). Soft-expect; do not invent alternatives.
+          EXPECTED_PROD_REF='djxulqyuafhihmuyzvvk'
+          if [ "${PROD_REF}" != "${EXPECTED_PROD_REF}" ]; then
+            echo "::warning::SUPABASE_PROD_PROJECT_REF differs from verified Both PROD ref ${EXPECTED_PROD_REF}"
+          fi
           echo "prod_ref_prefix=${PROD_REF:0:4}…"
 
       - name: Refuse Stripe Live unless explicitly authorized
@@ -79,5 +84,6 @@ jobs:
 
       - name: Placeholder notice
         run: |
-          echo "Gate passed structurally. Wire supabase functions deploy + Worker PROD in a follow-up once PROD project exists."
-          echo "NO_EXTERNAL_USERS remains required until PO authorization."
+          echo "Both PROD ref verified: djxulqyuafhihmuyzvvk"
+          echo "Wire migrations/functions/Worker only with production environment approval."
+          echo "NO_EXTERNAL_USERS / NO_STRIPE_LIVE remain required until PO authorization."

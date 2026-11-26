@@ -152,6 +152,9 @@ export const FRONTEND_CLIENT_SAFE_SKIP_EXACT = new Set([
   'lib/oauth.ts',
   'lib/oauth-complete.ts',
   'lib/oauth-complete.test.ts',
+  // PROD OAuth redirect inventory (non-secret constants; no Edge deploy target)
+  'lib/oauth/prod-redirects.ts',
+  'lib/oauth/prod-redirects.test.ts',
 ]);
 
 /** Reject path traversal / absolute / empty segments before any allowlist match. */

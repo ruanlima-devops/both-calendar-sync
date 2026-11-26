@@ -315,8 +315,8 @@ describe('C0.5 classifyDeployChanges', () => {
 
   it('T11n allowlist is exact-set only (count guard against broad expansion)', () => {
     // Guardrail: keep the set intentionally small; bump only with semantic audit.
-    // prior 48 + beta(2) + privacy/terms(2) = 52
-    expect(FRONTEND_CLIENT_SAFE_SKIP_EXACT.size).toBe(52);
+    // prior 52 + prod-redirects(2) = 54
+    expect(FRONTEND_CLIENT_SAFE_SKIP_EXACT.size).toBe(54);
   });
 
   it('T11o PR44 calendar UX exact paths → SAFE_SKIP', () => {
