@@ -1,0 +1,38 @@
+# Prevent accidental STAGE/feature merges into main (PR #62 class of incident).
+# Allow only when the PR carries label `allow-main`.
+name: Main PR Guard
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled, edited]
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  guard:
+    name: Main target guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require allow-main label for PRs into main
+        env:
+          BASE: ${{ github.event.pull_request.base.ref }}
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: |
+          set -euo pipefail
+          echo "base=${BASE}"
+          echo "labels=${LABELS}"
+          if [ "${BASE}" != "main" ]; then
+            echo "Not targeting main — ok"
+            exit 0
+          fi
+          case ",${LABELS}," in
+            *,allow-main,*)
+              echo "Label allow-main present — proceeding"
+              exit 0
+              ;;
+          esac
+          echo "::error::PRs into main require the label 'allow-main'. STAGE work must target develop."
+          exit 1

@@ -66,6 +66,9 @@ export const SAFE_SKIP_PREFIXES = [
 export const SAFE_SKIP_EXACT = new Set([
   '.github/workflows/both-stage-watchdog.yml',
   '.github/workflows/both-stage-watchdog-self.yml',
+  // Governance only — blocks accidental PRs into main; no STAGE deploy target.
+  '.github/workflows/main-pr-guard.yml',
+  '.github/pull_request_template.md',
   'supabase/functions/_shared/observability/alert-evaluator.ts',
   'supabase/functions/_shared/observability/alert-evaluator.test.ts',
   'vitest.config.ts',
