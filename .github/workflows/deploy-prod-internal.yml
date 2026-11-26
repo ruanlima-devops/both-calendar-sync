@@ -1,0 +1,83 @@
+# PROD_INTERNAL deploy — never runs on push/PR.
+# Requires GitHub Environment "production" approval + explicit secrets.
+# Refuses STAGE/legacy project refs. Does not enable public signup or Stripe Live.
+name: Deploy PROD Internal
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_prod:
+        description: 'Type PROD_INTERNAL to continue'
+        required: true
+        type: string
+      git_sha:
+        description: 'Exact commit SHA to deploy (must be on develop)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-prod-internal
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: Production target guard
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Confirm explicit intent
+        env:
+          CONFIRM: ${{ inputs.confirm_prod }}
+          SHA: ${{ inputs.git_sha }}
+        run: |
+          set -euo pipefail
+          if [ "${CONFIRM}" != "PROD_INTERNAL" ]; then
+            echo "::error::Confirmation token mismatch"
+            exit 1
+          fi
+          if ! echo "${SHA}" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::git_sha must be full 40-char commit"
+            exit 1
+          fi
+
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ inputs.git_sha }}
+
+      - name: Refuse STAGE/legacy Supabase refs
+        env:
+          PROD_REF: ${{ secrets.SUPABASE_PROD_PROJECT_REF }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PROD_REF}" ]; then
+            echo "::error::SUPABASE_PROD_PROJECT_REF secret missing — PROD not provisioned"
+            exit 1
+          fi
+          case "${PROD_REF}" in
+            qszggrrjhcwltnmxpxcy|sknpqjodttkpttaytdut)
+              echo "::error::Refuses STAGE/legacy project ref"
+              exit 1
+              ;;
+          esac
+          echo "prod_ref_prefix=${PROD_REF:0:4}…"
+
+      - name: Refuse Stripe Live unless explicitly authorized
+        env:
+          STRIPE_MODE: ${{ vars.STRIPE_PROD_MODE }}
+          LIVE_OK: ${{ vars.STRIPE_LIVE_AUTHORIZED }}
+        run: |
+          set -euo pipefail
+          MODE="${STRIPE_MODE:-test}"
+          if [ "${MODE}" = "live" ] && [ "${LIVE_OK}" != "1" ]; then
+            echo "::error::Stripe Live blocked (STRIPE_LIVE_AUTHORIZED!=1)"
+            exit 1
+          fi
+          echo "stripe_mode=${MODE}"
+
+      - name: Placeholder notice
+        run: |
+          echo "Gate passed structurally. Wire supabase functions deploy + Worker PROD in a follow-up once PROD project exists."
+          echo "NO_EXTERNAL_USERS remains required until PO authorization."
