@@ -1,6 +1,9 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { logSafe } from '../http.ts';
-import { resolveCancelAtPeriodEnd } from './cancel-at-period-end.ts';
+import {
+  resolveCancelAtPeriodEnd,
+  resolveSubscriptionPeriodBounds,
+} from './cancel-at-period-end.ts';
 import { resolveBillingTargetAccount } from './cancel-before-delete.ts';
 import { getSubscription } from './stripe.ts';
 import {
@@ -202,15 +205,14 @@ async function dispatchStripeEvent(
         return { kind: 'skipped', userId: resolved.userId, reason: 'deleted_account' };
       }
       const cancelAtPeriodEnd = resolveCancelAtPeriodEnd(obj);
+      const period = resolveSubscriptionPeriodBounds(obj);
       await applyStripeSubscription(db, {
         userId: resolved.userId,
         customerId: ids.customerId ?? '',
         subscriptionId: ids.subscriptionId ?? '',
         status: String(obj.status ?? 'active'),
-        currentPeriodStart:
-          typeof obj.current_period_start === 'number' ? obj.current_period_start : undefined,
-        currentPeriodEnd:
-          typeof obj.current_period_end === 'number' ? obj.current_period_end : undefined,
+        currentPeriodStart: period.currentPeriodStart,
+        currentPeriodEnd: period.currentPeriodEnd,
         cancelAtPeriodEnd,
         canceledAt: typeof obj.canceled_at === 'number' ? obj.canceled_at : undefined,
         eventCreated,

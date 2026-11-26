@@ -1,5 +1,9 @@
 import { timingSafeEqual } from '../crypto/tokens.ts';
 import { env, envOptional, logSafe } from '../http.ts';
+import {
+  resolveCancelAtPeriodEnd,
+  resolveSubscriptionPeriodBounds,
+} from './cancel-at-period-end.ts';
 
 const STRIPE_API = 'https://api.stripe.com/v1';
 
@@ -116,21 +120,18 @@ function asSubscriptionSnapshot(raw: Record<string, unknown>): StripeSubscriptio
         ? String((raw.customer as { id: string }).id)
         : null;
   const status = String(raw.status ?? '');
-  const cancelAt =
-    typeof raw.cancel_at_period_end === 'boolean'
-      ? raw.cancel_at_period_end
-      : raw.cancel_at != null && (status === 'active' || status === 'trialing')
-        ? true
-        : Boolean(raw.cancel_at_period_end);
+  const resolvedCancel = resolveCancelAtPeriodEnd(raw);
+  const period = resolveSubscriptionPeriodBounds(raw);
   return {
     id: String(raw.id ?? ''),
     customer,
     status,
-    cancel_at_period_end: cancelAt,
+    // Snapshot always materializes a boolean for callers that require one.
+    cancel_at_period_end: resolvedCancel === true,
     cancel_at: asUnix(raw.cancel_at),
     canceled_at: asUnix(raw.canceled_at),
-    current_period_start: asUnix(raw.current_period_start),
-    current_period_end: asUnix(raw.current_period_end),
+    current_period_start: period.currentPeriodStart ?? null,
+    current_period_end: period.currentPeriodEnd ?? null,
   };
 }
 
