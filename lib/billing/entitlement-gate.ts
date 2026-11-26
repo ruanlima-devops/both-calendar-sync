@@ -17,7 +17,8 @@ export function isEntitlementExemptPath(path: string): boolean {
 /**
  * Returns an in-app redirect when entitlement and path disagree.
  * - expired/no access on calendars/home → paywall
- * - active access on paywall → tabs home
+ * - active *subscription* on paywall → tabs home
+ * - active *trial* may stay on paywall (upgrade / Ver planos)
  */
 export function resolveEntitlementRedirect(
   entitlement: EntitlementAccess,
@@ -26,7 +27,13 @@ export function resolveEntitlementRedirect(
   if (!entitlement.hasAccess && !isEntitlementExemptPath(path)) {
     return '/(app)/paywall';
   }
-  if (entitlement.hasAccess && path.toLowerCase().includes('paywall')) {
+  // Only paid subscribers leave the paywall automatically. Trial users must
+  // reach /(app)/paywall from TrialBanner / "Ver planos" to start checkout.
+  if (
+    entitlement.hasAccess &&
+    entitlement.source === 'subscription' &&
+    path.toLowerCase().includes('paywall')
+  ) {
     return '/(app)/(tabs)';
   }
   return null;
