@@ -10,7 +10,9 @@
 
 ## 1. Resumo executivo
 
-Após consentimento Google do PO, a sessão Chrome QA foi revalidada: **Google e Microsoft CONNECTED** na mesma conta QA (`bothcalendartest@gmail.com` / hotmail), sem `token_refresh_failed`, entitlement Stripe **Ativo**. Sync bidirecional real demonstrado via eventos sintéticos + mirrors no destino (não só HTTP 200). Dedup / anti-loop / update de horário **PASS**. Stripe cancelamento no portal permanece **PARTIAL** (UI ok; `cancel_at_period_end` ainda `false` no DB). E-mail inbox **BLOCKED**. SEC-07 **PASS**.
+Após consentimento Google do PO, a sessão Chrome QA foi revalidada: **Google e Microsoft CONNECTED** na mesma conta QA (`bothcalendartest@gmail.com` / hotmail), sem `token_refresh_failed`, entitlement Stripe **Ativo**. Sync bidirecional real demonstrado via eventos sintéticos + mirrors no destino (não só HTTP 200). Dedup / anti-loop / update de horário **PASS**. SEC-07 **PASS**.
+
+**Closure 2026-11-26:** e-mail confirm + Stripe cancel DB/UI + FE freshness fechados — ver `BOTH-STAGE-P0-FINAL-CLOSURE-E2E.md` (`BOTH_STAGE_P0_E2E_CERTIFIED=PASS`).
 
 **Decisão:** `BOTH_STAGE_REAL_PROVIDER_E2E_CERTIFIED=PASS` · `BOTH_STAGE_P0_E2E_CERTIFIED=PARTIAL` · `BETA_READY=NO` · `PRODUCTION_RELEASE_AUTHORIZED=NO` · `PRODUCTION_DEPLOY_EXECUTED=NO`.
 

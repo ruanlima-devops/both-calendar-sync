@@ -55,3 +55,16 @@ Legend: `DONE_LIVE_STAGE` · `DONE_CODE_ONLY` · `PARTIAL` · `NOT_IMPLEMENTED` 
 ## Update 2026-11-26 P0 functional
 
 See `BOTH-STAGE-P0-FUNCTIONAL-E2E.md`. Trial 14d STAGE_REAL PASS; OAuth initiation PASS; OAuth live BLOCKED; Sync live NOT_EXECUTED; Stripe checkout URL PASS; #55 Google busy fix live.
+
+## Update 2026-11-26 P0 final closure
+
+See `BOTH-STAGE-P0-FINAL-CLOSURE-E2E.md` (develop `c15f277`).
+
+| FEATURE | STAGE_TESTED | CLASS |
+|---------|--------------|-------|
+| Email confirm + post-confirm login | PASS (inbox QA + verifyOtp) | DONE_LIVE_STAGE |
+| Stripe portal cancel ↔ DB/UI | PASS (flexible `cancel_at` → `cancel_at_period_end`) | DONE_LIVE_STAGE |
+| Frontend STAGE freshness | PASS (`entry-ad241859…`) | DONE_LIVE_STAGE |
+| Google+Microsoft connected + sync hist | PASS (BOTHQA20261126022819 + revalidate) | DONE_LIVE_STAGE |
+
+**BOTH_STAGE_P0_E2E_CERTIFIED=PASS** · **BETA_READINESS_RECOMMENDATION=GO** · **BETA_READY=NO** · **PRODUCTION_RELEASE_AUTHORIZED=NO**
