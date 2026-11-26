@@ -196,3 +196,5 @@ export async function onAccessGranted(db: SupabaseClient, userId: string): Promi
 export async function onAccessRevoked(db: SupabaseClient, userId: string): Promise<void> {
   await pauseIntegrationsForUser(db, userId);
 }
+
+// stage deploy re-touch: beta gate already wired
