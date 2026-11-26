@@ -140,3 +140,5 @@ $$;
 
 revoke all on function public.redeem_beta_invite(text) from public;
 grant execute on function public.redeem_beta_invite(text) to authenticated;
+
+-- stage deploy re-touch marker: 2026-11-26T04:05Z

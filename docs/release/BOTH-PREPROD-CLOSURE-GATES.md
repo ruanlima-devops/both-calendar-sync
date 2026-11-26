@@ -71,3 +71,7 @@
 ## Why PROD was not created
 
 `supabase projects create` → **Forbidden** (org token cannot create). Zero-cost path blocked by permissions, not by cost refusal alone.
+
+## STAGE landing note
+
+Deploy window `DEPLOY_SAFETY_ALLOW_CANDIDATE=1` opened 2026-11-26 to land `beta_enrollment` migration (flag default false) + entitlement shared gate. Gate restored to 0 after deploy.
