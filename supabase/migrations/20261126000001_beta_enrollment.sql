@@ -91,7 +91,7 @@ create or replace function public.redeem_beta_invite(p_code text)
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   uid uuid := auth.uid();
@@ -112,7 +112,8 @@ begin
     return jsonb_build_object('ok', false, 'error', 'email_missing');
   end if;
 
-  code_digest := encode(digest(convert_to(code_norm, 'utf8'), 'sha256'), 'hex');
+  -- Cast algorithm explicitly for pgcrypto digest(bytea, text) resolution under db lint.
+  code_digest := encode(extensions.digest(convert_to(code_norm, 'utf8'), 'sha256'::text), 'hex');
 
   select * into invite
   from public.beta_invites i
