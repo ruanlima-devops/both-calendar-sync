@@ -5,7 +5,9 @@
 | Item | STAGE | PROD |
 |------|-------|------|
 | Supabase project | `qszggrrjhcwltnmxpxcy` Both STAGE | `djxulqyuafhihmuyzvvk` Both PROD |
-| Org / plan | Both Calendar Sync / Free | Same org / Free |
+| Org / plan (today) | Both Calendar Sync `otaqdspnjsewiymnqbmr` / Free | **Same org today** / Free |
+| Org / plan (Scenario C target) | Stay Free on `otaqdspnjsewiymnqbmr` | **Both Production** `ufxaefwnhwzxafvajsfg` → Pro when paid approved; transfer **NOT** executed |
+| Transfer blocker | n/a | GitHub integration connected (Dashboard) |
 | Custom domain | none (uses `*.supabase.co`) | Proposed `auth.bothcalendar.com` — **COST_APPROVAL_REQUIRED** (Pro + ~$10/mo) |
 | Frontend canonical | `https://stage.bothcalendar.com` | Proposed `https://app.bothcalendar.com` (**no DNS**) |
 | Auth Site URL | STAGE configured | Was localhost; configure after FE/DNS |

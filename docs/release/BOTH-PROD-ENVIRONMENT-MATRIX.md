@@ -3,6 +3,7 @@
 | COMPONENT | STAGE_RESOURCE | PROD_RESOURCE | CURRENT_STATUS | OWNER | EST_COST | CREDENTIAL_ISOLATION | REQUIRED_ACTION |
 |-----------|----------------|---------------|----------------|-------|----------|----------------------|-----------------|
 | Supabase project | qszggrrjhcwltnmxpxcy | **djxulqyuafhihmuyzvvk** | Both PROD exists (Free/nano) | PO/ops | $0 Free | isolated | Apply migrations; secrets |
+| Supabase org | otaqdspnjsewiymnqbmr Free | Today same; **target** `ufxaefwnhwzxafvajsfg` Both Production Free empty | Scenario C selected; transfer blocked by GitHub | PO | $0 now / ~$35 later | separate billing | Paid approval then transfer+Pro |
 | DB migrations | applied STAGE | empty PROD | not executed | eng | $0 | N/A | PROD_INTERNAL when approved |
 | Edge Functions | deployed STAGE | none | not executed | eng | $0 | new secrets | After OAuth clients |
 | CF Worker | both-calendar-sync-stage | both-calendar-sync-prod (planned) | config only | eng | $0 | separate | After DNS/PO |

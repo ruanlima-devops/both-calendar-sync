@@ -1,0 +1,7 @@
+scenario,description,subscription_usd,compute_usd,credits_usd,custom_domain_usd,total_month_usd,total_year_usd,viable_now,notes
+A,STAGE+PROD same org Free,0,0,0,0,0,0,yes,current
+B,Same org Pro + CD on PROD,25,20,-10,10,45,540,requires_PO,2x Micro after paid Nano pricing
+C,STAGE Free org + PROD Pro org + CD,25,10,-10,10,35,420,PO_SELECTED_TARGET_keep_spend_0,target_org_ufxaefwnhwzxafvajsfg_created_transfer_pending_github_block
+D,Two Pro orgs + CD PROD,50,20,-20,10,60,720,requires_PO,not recommended
+E,Both Free no Custom Domain,0,0,0,0,0,0,yes,defer branding
+pricing_as_of,2026-11-26,,,,,,,official supabase.com/pricing
