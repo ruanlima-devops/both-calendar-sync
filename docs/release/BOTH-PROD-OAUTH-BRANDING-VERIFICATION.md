@@ -15,11 +15,14 @@ PROD app display name (config): **Both: Calendar Sync** (`app.config.ts` product
 
 | Doc | Status |
 |-----|--------|
-| Privacy | In-app **DRAFT / PENDING LEGAL APPROVAL** |
-| Terms | In-app **DRAFT / PENDING LEGAL APPROVAL** |
+| Legal entity | **RUAN FELIPE SERAFIM DE LIMA LTDA** (APPROVED) · brand **Both** · see `BOTH-LEGAL-ENTITY-DECISION.md` |
+| Privacy | In-app **DRAFT** — names LTDA as operator; CNPJ not published until RFB confirm |
+| Terms | In-app **DRAFT** — same |
 | Public hosted URLs on bothcalendar.com | **Not published as approved legal** |
+| LEGAL_DOCUMENT_VERIFICATION | **PENDING** |
+| PROVIDER_VERIFICATION | **PENDING** |
 
-Do not submit Google/Microsoft verification until Privacy/Terms are approved and publicly hosted.
+Do not submit Google/Microsoft verification until Privacy/Terms are approved, publicly hosted, and cadastral data are PO-confirmed.
 
 ## Google verification package (prepare; do not submit)
 

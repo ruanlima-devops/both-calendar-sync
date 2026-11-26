@@ -17,13 +17,15 @@ Exact Calendar URI must match `GOOGLE_REDIRECT_URI` Edge secret (source: `google
 
 ## Consent screen (target)
 
-- App name: **Both**
+- App name: **Both** (brand)
+- Legal / org verification entity: **RUAN FELIPE SERAFIM DE LIMA LTDA** (PO APPROVED; CNPJ confirm PENDING)
 - Audience: **External**
 - Authorized domain: `bothcalendar.com` (after Search Console verification)
 - Homepage: `https://bothcalendar.com`
 - Privacy / Terms: approved public URLs only (currently DRAFT in-app)
-- Support / developer contact: PO-authorized addresses
+- Support / developer contact: PO-authorized @bothcalendar.com addresses
 - Logo: `assets/images/icon.png` (official Both asset)
+- Do **not** submit verification until `PROVIDER_VERIFICATION` authorized
 
 ## Scopes
 

@@ -2,35 +2,39 @@
 
 **Authorizations locked:** BETA_EXTERNAL_ACCESS=NO · PUBLIC_LAUNCH=NO · STRIPE_LIVE=NO
 
+| Gate | Value |
+|------|-------|
+| LEGAL_ENTITY_DECISION | **PASS** — RUAN FELIPE SERAFIM DE LIMA LTDA |
+| LEGAL_DOCUMENT_VERIFICATION | **PENDING** |
+| PROVIDER_VERIFICATION | **PENDING** |
+
+Canonical record: `BOTH-LEGAL-ENTITY-DECISION.md`
+
 ## Decisions requiring PO
 
-| # | Decision | Options / notes | Blocks |
-|---|----------|-----------------|--------|
-| 1 | Legal entity for publishers | Keep **RUAN FELIPE SERAFIM DE LIMA LTDA** interim vs wait for Both company | Google/MS verification, invoices |
-| 2 | Support / privacy / developer emails | Must be official Both addresses | Consent screen |
-| 3 | Approve Privacy + Terms for public host | Until then DRAFT only | Verification submit |
-| 4 | Upgrade Supabase org to **Pro** (~$25/mo) | Required for Custom Domains | Branded Auth URL |
-| 5 | Approve Custom Domain add-on (~$10/mo) for `auth.bothcalendar.com` | Official Supabase feature only | Enterprise branding on consent |
-| 6 | Approve public DNS for `app.` / `auth.` | Zero $ DNS; public exposure risk | FE + Auth routing |
-| 7 | Authorize Google verification **submission** | Agent prepares; PO submits/approves | Multiweek refresh tokens |
-| 8 | Provide Both-owned Entra admin + Partner ID path | Current az = EAF tenant (wrong) | MS PROD apps + verified publisher |
-| 9 | Confirm Sign-In vs Calendar client separation | Recommended; code already separates | — |
-| 10 | When to re-enable PROD signup | Keep disabled until invite gate + EXTERNAL=YES | External users |
+| # | Decision | Status / notes | Blocks |
+|---|----------|----------------|--------|
+| 1 | Legal entity for publishers | **APPROVED** — RUAN FELIPE SERAFIM DE LIMA LTDA; brand Both | — |
+| 2 | Support / privacy / developer emails | Must be @bothcalendar.com | Consent screen |
+| 3 | Approve Privacy + Terms for public host | DRAFT until legal text + RFB data confirmed | Verification submit |
+| 4 | Confirm CNPJ/address set for public + provider forms | BrasilAPI candidate recorded; **PENDING RFB confirm** | Provider forms |
+| 5 | Upgrade Supabase org to **Pro** (~$25/mo) | Required for Custom Domains | Branded Auth URL |
+| 6 | Approve Custom Domain add-on (~$10/mo) for `auth.bothcalendar.com` | Official Supabase only | Enterprise branding |
+| 7 | Approve public DNS for `app.` / `auth.` | Zero $ DNS; public exposure risk | FE + Auth routing |
+| 8 | Authorize Google verification **submission** | Agent prepares only | Multiweek refresh tokens |
+| 9 | Provide Both-owned Entra admin + Partner ID path | az CLI was EAF (wrong) | MS PROD + verified publisher |
+| 10 | When to re-enable PROD signup | Keep disabled until invite + EXTERNAL=YES | External users |
 
-## Safe actions already taken / in PR
+## Safe actions already taken
 
-- Discovered PROD ref `djxulqyuafhihmuyzvvk`
-- Disabled PROD “Allow new users to sign up” (session)
-- Created GCP project **Both Production** (`both-production`) — $0 create
-- Documented architecture, redirects, costs, verification packages
-- Hardened Deploy PROD Internal expected-ref check
+- PROD ref `djxulqyuafhihmuyzvvk`; signup disabled; Google/Azure Auth off  
+- GCP `both-production` created  
+- Legal entity decision recorded; Privacy/Terms drafts name LTDA as operator  
+- Cost assessment: `docs/finance/BOTH-SUPABASE-COST-ASSESSMENT-2026.md`
 
 ## Do not do without PO
 
-- Enable Supabase Custom Domain (paid)
-- Upgrade to Pro without approval
-- Submit Google/Microsoft verification
-- Public DNS cutover for app/auth
-- Stripe Live
-- External invites
-- Copy STAGE users/tokens
+- Submit Google/Microsoft verification  
+- Publish Privacy/Terms as final with unverified CNPJ  
+- Enable Supabase Custom Domain / Pro without cost approval  
+- Public DNS cutover · Stripe Live · External invites · Copy STAGE tokens  

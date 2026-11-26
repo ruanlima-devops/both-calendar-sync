@@ -105,11 +105,18 @@ Never store secrets in Git. Prefer GitHub Environment `production` + Supabase Ed
 
 ---
 
-## Legal publisher identity (PO decision)
+## Legal publisher identity (PO decision — APPROVED)
 
-Operational account observed for Supabase/GCP: personal/company mix under **Ruan Felipe Serafim De Lima** / `ruan.lima406@gmail.com` / org email `bothcalendarsync@gmail.com`.
+| Field | Value |
+|-------|-------|
+| LEGAL_ENTITY_DECISION | **PASS** |
+| Legal entity | **RUAN FELIPE SERAFIM DE LIMA LTDA** (Brazilian LTDA) |
+| Product brand | **Both** |
+| Domain | **bothcalendar.com** |
+| Both LTDA | **Does not exist** |
+| LEGAL_DOCUMENT_VERIFICATION | **PENDING** (confirm CNPJ/address vs Receita before provider forms) |
+| PROVIDER_VERIFICATION | **PENDING** (do not submit) |
 
-Historical legal entity referenced: **RUAN FELIPE SERAFIM DE LIMA LTDA**.  
-**Both LTDA** does **not** exist — do not invent.
-
-Recommendation: use one consistent legal entity for Google Cloud, Microsoft Partner verification, Stripe, Privacy, and Terms until a dedicated Both company is incorporated; plan a publisher migration if entity changes.
+Canonical: `BOTH-LEGAL-ENTITY-DECISION.md`.  
+Operational accounts observed (not legal proof): GCP/Supabase under `ruan.lima406@gmail.com` / `bothcalendarsync@gmail.com`.  
+Future independent Both PJ: plan publisher/policy migration when incorporated.
