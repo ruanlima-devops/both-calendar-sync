@@ -327,6 +327,40 @@ describe('processStripeEvent', () => {
     expect(tables.user_subscriptions[0]?.cancel_at_period_end).toBe(true);
   });
 
+  it('maps flexible-billing cancel_at with cancel_at_period_end=false', async () => {
+    const { db, tables } = createFakeDb({
+      profiles: [profileA],
+      user_subscriptions: [subRow({ status: 'active', cancel_at_period_end: false })],
+      billing_events: [],
+      calendar_connections: [],
+    });
+
+    const result = await processStripeEvent(db, {
+      id: 'evt_flexible_cancel_at',
+      type: 'customer.subscription.updated',
+      created: 1_700_002_150,
+      data: {
+        object: {
+          id: 'sub_A',
+          customer: 'cus_A',
+          status: 'active',
+          cancel_at_period_end: false,
+          cancel_at: 1_798_250_645,
+          canceled_at: 1_795_658_848,
+          items: {
+            data: [{ current_period_start: 1_795_658_645, current_period_end: 1_798_250_645 }],
+          },
+          metadata: { user_id: USER_A },
+        },
+      },
+    });
+    expect(result).toEqual({ ok: true });
+    expect(tables.user_subscriptions[0]?.cancel_at_period_end).toBe(true);
+    expect(tables.user_subscriptions[0]?.current_period_end).toBe(
+      new Date(1_798_250_645 * 1000).toISOString(),
+    );
+  });
+
   it('checkout.session.completed without Stripe expand preserves existing cancel_at_period_end', async () => {
     const { db, tables } = createFakeDb({
       profiles: [profileA],
