@@ -51,3 +51,7 @@ Legend: `DONE_LIVE_STAGE` · `DONE_CODE_ONLY` · `PARTIAL` · `NOT_IMPLEMENTED` 
 | BLOCKED | Live providers, SYN-05 remote, Beta |
 
 **Not invented:** iCloud remains out of MVP web launch path unless roadmap says otherwise (`NOT_IN_MVP` for web P0).
+
+## Update 2026-11-26 P0 functional
+
+See `BOTH-STAGE-P0-FUNCTIONAL-E2E.md`. Trial 14d STAGE_REAL PASS; OAuth initiation PASS; OAuth live BLOCKED; Sync live NOT_EXECUTED; Stripe checkout URL PASS; #55 Google busy fix live.
