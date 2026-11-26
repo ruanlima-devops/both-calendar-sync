@@ -8,26 +8,29 @@
 | CLOSED_BETA_EXTERNAL_ACCESS_AUTHORIZED | **NO** |
 | PUBLIC_SIGNUP_AUTHORIZED | **NO** |
 | STRIPE_LIVE_AUTHORIZED | **NO** |
+| LEGAL_ENTITY_DECISION | **PASS** — RUAN FELIPE SERAFIM DE LIMA LTDA |
+| LEGAL_DOCUMENT_VERIFICATION | **PENDING** |
+| PROVIDER_VERIFICATION | **PENDING** |
 
 ## Decisions needed from PO (blocking external beta)
 
-1. **Supabase org create permission** — grant token/role so `Both PROD` can be created (or create manually and share ref).  
-2. **Cost** — Free tier OK? Or approve Pro (~$25/mo) if Free limits block Auth/SMTP/backups.  
-3. **Hostname** — Approve `app.bothcalendar.com` (or other) + DNS cutover plan; until then Access-gated workers.dev only.  
-4. **Google** — Approve External audience path + Publishing “In production” / verification submission (agent must **not** submit without approval). Business docs / privacy URLs.  
-5. **Microsoft** — Confirm Entra app for Both PROD, account types (personal vs work), publisher verification if needed.  
-6. **Legal** — Approve Privacy + Terms; company identity; support/privacy/incident contacts.  
+1. **Cost** — Stay Free vs Pro (~$25/mo) + Custom Domain (~$10) — see `docs/finance/BOTH-SUPABASE-COST-ASSESSMENT-2026.md`.  
+2. **Hostname** — Approve `app.bothcalendar.com` / `auth.bothcalendar.com` + DNS.  
+3. **Confirm CNPJ/address** for public policies + Google/MS forms (candidate in `BOTH-LEGAL-ENTITY-DECISION.md`; RFB confirm).  
+4. **Privacy + Terms** — Approve final text + institutional contacts (@bothcalendar.com).  
+5. **Google** — Authorize verification **submission** only after docs live.  
+6. **Microsoft** — Entra Both tenant + Partner Center under LTDA; authorize publisher verification.  
 7. **Beta billing** — Choose A/B/C (see BOTH-CLOSED-BETA-PROD-LAUNCH-PLAN.md).  
-8. **Ops owner** — Named on-call for closed beta; alert destination (email/Slack) without SYN-05 paid if possible.  
-9. **SMTP** — Production sender domain + credentials (not personal Gmail).  
-10. **First cohort** — Explicit list of 5–10 emails when ready to invite (separate approval).  
+8. **Ops owner** — On-call + alert destination.  
+9. **SMTP** — Production sender on bothcalendar.com.  
+10. **First cohort** — 5–10 emails when EXTERNAL=YES.  
 
-## Safe to proceed without PO (already done / in PR)
+## Safe / already done
 
-- Beta invite schema + server enforcement (flag default **false**)  
-- Deploy PROD Internal workflow guards  
-- Architecture / matrix / bootstrap / security docs  
-- STAGE remains internal QA  
+- Legal entity decision recorded (LTDA; brand Both)  
+- PROD Supabase `djxulqyuafhihmuyzvvk`; signup off  
+- Beta invite gate (default false) · Deploy PROD Internal guards  
+- STAGE = internal QA only  
 
 ## Must remain false until later PO flip
 

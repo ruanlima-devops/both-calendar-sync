@@ -1,14 +1,14 @@
 import { LegalDocument } from '@/components/auth/LegalDocument';
 
-const BODY = `Última atualização: 23 de agosto de 2026
+const BODY = `Última atualização: 26 de novembro de 2026
 
-[REVISÃO JURÍDICA NECESSÁRIA] Rascunho técnico — revise com assessoria jurídica antes da publicação.
+[REVISÃO JURÍDICA NECESSÁRIA] Rascunho técnico — revise com assessoria jurídica antes da publicação. Dados cadastrais da operadora (CNPJ/endereço) só entram nestes Termos após confirmação oficial (LEGAL_DOCUMENT_VERIFICATION=PENDING).
 
 1. Aceite
 Ao usar o Both, você concorda com estes Termos.
 
-2. Serviço
-O Both sincroniza calendários Google e/ou Microsoft que você conectar e oferece recursos de organização, notificações in-app e resumos por e-mail, conforme seu plano (teste gratuito ou Both Pro).
+2. Serviço e operador
+Both é a marca do produto. O serviço é operado por RUAN FELIPE SERAFIM DE LIMA LTDA (Brasil). Não existe “Both LTDA”. Domínio oficial: bothcalendar.com. O Both sincroniza calendários Google e/ou Microsoft que você conectar e oferece organização, notificações in-app e resumos por e-mail, conforme seu plano (teste gratuito ou Both Pro).
 
 3. Conta
 Você é responsável pelas contas Google/Microsoft/Apple vinculadas e pelas permissões concedidas.

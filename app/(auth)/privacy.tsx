@@ -1,11 +1,11 @@
 import { LegalDocument } from '@/components/auth/LegalDocument';
 
-const BODY = `Última atualização: 23 de agosto de 2026
+const BODY = `Última atualização: 26 de novembro de 2026
 
-[REVISÃO JURÍDICA NECESSÁRIA] Este texto é um rascunho técnico para publicação nas lojas. Faça revisão por advogado antes de usar como política definitiva.
+[REVISÃO JURÍDICA NECESSÁRIA] Este texto é um rascunho técnico. Faça revisão por advogado antes de usar como política definitiva. CNPJ e endereço cadastral só serão publicados após confirmação no extrato da Receita Federal (LEGAL_DOCUMENT_VERIFICATION=PENDING).
 
 1. Quem somos
-O Both é um aplicativo de calendário unificado que sincroniza agendas Google, Microsoft e Apple iCloud que você conectar.
+Both é a marca do produto de sincronização de calendários (Google, Microsoft e Apple iCloud que você conectar). O serviço é operado por RUAN FELIPE SERAFIM DE LIMA LTDA, sociedade empresária limitada brasileira. Não existe pessoa jurídica “Both LTDA”. Domínio oficial: bothcalendar.com.
 
 2. Dados que tratamos
 • Conta: identificador de usuário, e-mail (ou e-mail oculto da Apple), nome de exibição opcional, fuso horário e preferências.
