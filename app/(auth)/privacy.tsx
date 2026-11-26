@@ -28,7 +28,12 @@ Você pode excluir a conta no app (Conta → Excluir minha conta) ou em /delete-
 O Both não utiliza SDKs de publicidade para tracking cross-app. Não revendemos seus eventos de calendário.
 
 7. Contato
-[PENDENTE] Informe e-mail/URL de suporte oficiais antes da publicação.
+[PENDENTE — PO/LEGAL] Informe e-mail/URL de suporte e privacidade oficiais antes de qualquer usuário externo.
+
+8. Beta fechado (quando aplicável)
+Durante um beta por convite em produção, o acesso pode ser limitado a e-mails convidados; o processamento de calendários e tokens permanece o mesmo. O beta não altera a necessidade de revisão jurídica desta política.
+
+[STATUS] DRAFT / PENDING LEGAL APPROVAL — não tratar como política definitiva publicada.
 
 Se houver domínio público, hospede também esta política em URL estável exigida pelas lojas.`;
 

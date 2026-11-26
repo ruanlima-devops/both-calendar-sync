@@ -110,6 +110,11 @@ export async function getEntitlement(db: SupabaseClient, userId: string): Promis
 }
 
 export async function requireEntitlement(db: SupabaseClient, userId: string): Promise<Entitlement> {
+  // Closed-beta gate (no-op unless beta_enrollment_required=true).
+  const { userPassesBetaEnrollment } = await import('../beta/enrollment.ts');
+  const betaOk = await userPassesBetaEnrollment(db, userId);
+  if (!betaOk) throw new Error('BETA_INVITE_REQUIRED');
+
   const entitlement = await getEntitlement(db, userId);
   if (!entitlement.hasAccess) throw new Error('ENTITLEMENT_REQUIRED');
   return entitlement;

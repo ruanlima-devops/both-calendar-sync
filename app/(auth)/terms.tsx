@@ -29,7 +29,12 @@ Sincronização depende de APIs Google/Microsoft e da disponibilidade da interne
 [PENDENTE — revisão jurídica] Inclua cláusulas de limitação de responsabilidade adequadas à sua jurisdição.
 
 8. Contato
-[PENDENTE] E-mail/URL de suporte.`;
+[PENDENTE — PO/LEGAL] E-mail/URL de suporte.
+
+9. Beta
+Participação em beta por convite pode impor limitações de funcionalidade, duração e suporte. Não há garantia de disponibilidade contínua.
+
+[STATUS] DRAFT / PENDING LEGAL APPROVAL.`;
 
 export default function TermsScreen() {
   return <LegalDocument title="Termos de Uso" body={BODY} />;

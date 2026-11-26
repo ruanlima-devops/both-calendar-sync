@@ -1,0 +1,17 @@
+{
+  "$schema": "https://unpkg.com/wrangler@4/config-schema.json",
+  "name": "both-calendar-sync-prod",
+  "compatibility_date": "2026-09-01",
+  "build": {
+    "command": "APP_VARIANT=production npx expo export -p web"
+  },
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  },
+  // Hostname NOT activated — PO must approve public DNS before adding routes.
+  // Candidate (unverified): app.bothcalendar.com
+  "routes": [],
+  "workers_dev": false,
+  "previews": {}
+}
