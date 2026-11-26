@@ -282,7 +282,9 @@ export async function applyStripeSubscription(
     status: string;
     currentPeriodStart?: number | null;
     currentPeriodEnd?: number | null;
+    /** When undefined, the existing DB column is preserved (never clobbered to false). */
     cancelAtPeriodEnd?: boolean;
+    canceledAt?: number | null;
     eventCreated?: number | null;
   },
 ): Promise<'applied' | 'ignored_stale'> {
@@ -301,11 +303,23 @@ export async function applyStripeSubscription(
     billing_customer_id: input.customerId || null,
     billing_subscription_id: input.subscriptionId,
     status: mapped,
-    current_period_start: unixToIso(input.currentPeriodStart),
-    current_period_end: unixToIso(input.currentPeriodEnd),
-    cancel_at_period_end: Boolean(input.cancelAtPeriodEnd),
     updated_at: new Date().toISOString(),
   };
+  // Only write period/cancel fields when the caller provided them. Thin events
+  // (e.g. checkout.session.completed without subscription expand) must not wipe
+  // cancel_at_period_end or period bounds established by subscription.updated.
+  if (input.currentPeriodStart !== undefined) {
+    patch.current_period_start = unixToIso(input.currentPeriodStart);
+  }
+  if (input.currentPeriodEnd !== undefined) {
+    patch.current_period_end = unixToIso(input.currentPeriodEnd);
+  }
+  if (input.cancelAtPeriodEnd !== undefined) {
+    patch.cancel_at_period_end = input.cancelAtPeriodEnd;
+  }
+  if (input.canceledAt !== undefined) {
+    patch.canceled_at = unixToIso(input.canceledAt);
+  }
   if (input.eventCreated != null) {
     patch.last_stripe_event_at = new Date(input.eventCreated * 1000).toISOString();
   }
@@ -320,6 +334,7 @@ export async function applyStripeSubscription(
   logSafe('[billing-webhook]', {
     userIdPrefix: `${input.userId.slice(0, 8)}…`,
     status: mapped,
+    cancelAtPeriodEnd: input.cancelAtPeriodEnd ?? null,
   });
   return 'applied';
 }

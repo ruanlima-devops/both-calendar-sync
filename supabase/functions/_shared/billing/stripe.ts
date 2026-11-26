@@ -14,6 +14,10 @@ export type StripeSubscriptionSnapshot = {
   customer: string | null;
   status: string;
   cancel_at_period_end: boolean;
+  cancel_at: number | null;
+  canceled_at: number | null;
+  current_period_start: number | null;
+  current_period_end: number | null;
 };
 
 function stripeError(body: unknown, status: number): Error {
@@ -100,6 +104,10 @@ export function assertStripeKeyMode(): void {
   }
 }
 
+function asUnix(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
 function asSubscriptionSnapshot(raw: Record<string, unknown>): StripeSubscriptionSnapshot {
   const customer =
     typeof raw.customer === 'string'
@@ -107,11 +115,22 @@ function asSubscriptionSnapshot(raw: Record<string, unknown>): StripeSubscriptio
       : raw.customer && typeof raw.customer === 'object' && typeof (raw.customer as { id?: unknown }).id === 'string'
         ? String((raw.customer as { id: string }).id)
         : null;
+  const status = String(raw.status ?? '');
+  const cancelAt =
+    typeof raw.cancel_at_period_end === 'boolean'
+      ? raw.cancel_at_period_end
+      : raw.cancel_at != null && (status === 'active' || status === 'trialing')
+        ? true
+        : Boolean(raw.cancel_at_period_end);
   return {
     id: String(raw.id ?? ''),
     customer,
-    status: String(raw.status ?? ''),
-    cancel_at_period_end: Boolean(raw.cancel_at_period_end),
+    status,
+    cancel_at_period_end: cancelAt,
+    cancel_at: asUnix(raw.cancel_at),
+    canceled_at: asUnix(raw.canceled_at),
+    current_period_start: asUnix(raw.current_period_start),
+    current_period_end: asUnix(raw.current_period_end),
   };
 }
 

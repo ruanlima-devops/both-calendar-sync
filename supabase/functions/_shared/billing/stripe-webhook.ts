@@ -1,6 +1,8 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { logSafe } from '../http.ts';
+import { resolveCancelAtPeriodEnd } from './cancel-at-period-end.ts';
 import { resolveBillingTargetAccount } from './cancel-before-delete.ts';
+import { getSubscription } from './stripe.ts';
 import {
   applyPaymentFailed,
   applyStripeSubscription,
@@ -156,13 +158,27 @@ async function dispatchStripeEvent(
         });
         return { kind: 'ignored', userId: resolved.userId };
       }
+      // Prefer Stripe source-of-truth for periods/cancel; fall back to activate-only patch
+      // that does not wipe cancel_at_period_end / period bounds.
+      let snap: Awaited<ReturnType<typeof getSubscription>> | null = null;
+      try {
+        snap = await getSubscription(subscriptionId);
+      } catch (err) {
+        logSafe('[billing-webhook] checkout_subscription_fetch_failed', {
+          message: err instanceof Error ? err.message : 'unknown',
+        });
+      }
       await applyStripeSubscription(db, {
         userId: resolved.userId,
-        customerId: ids.customerId ?? '',
+        customerId: snap?.customer ?? ids.customerId ?? '',
         subscriptionId,
-        status: 'active',
-        currentPeriodStart: null,
-        currentPeriodEnd: null,
+        status: snap?.status ?? 'active',
+        currentPeriodStart: snap?.current_period_start,
+        currentPeriodEnd: snap?.current_period_end,
+        // When Stripe fetch fails, omit cancel so we never clobber a scheduled cancel
+        // with Boolean(undefined)→false (root cause of STAGE cancel drift).
+        cancelAtPeriodEnd: snap ? snap.cancel_at_period_end : undefined,
+        canceledAt: snap ? snap.canceled_at : undefined,
         eventCreated,
       });
       await db.from('product_events').insert({
@@ -185,14 +201,18 @@ async function dispatchStripeEvent(
       if ((await requireExistingAccount(db, type, resolved.userId)) === 'missing') {
         return { kind: 'skipped', userId: resolved.userId, reason: 'deleted_account' };
       }
+      const cancelAtPeriodEnd = resolveCancelAtPeriodEnd(obj);
       await applyStripeSubscription(db, {
         userId: resolved.userId,
         customerId: ids.customerId ?? '',
         subscriptionId: ids.subscriptionId ?? '',
         status: String(obj.status ?? 'active'),
-        currentPeriodStart: obj.current_period_start as number | null,
-        currentPeriodEnd: obj.current_period_end as number | null,
-        cancelAtPeriodEnd: Boolean(obj.cancel_at_period_end),
+        currentPeriodStart:
+          typeof obj.current_period_start === 'number' ? obj.current_period_start : undefined,
+        currentPeriodEnd:
+          typeof obj.current_period_end === 'number' ? obj.current_period_end : undefined,
+        cancelAtPeriodEnd,
+        canceledAt: typeof obj.canceled_at === 'number' ? obj.canceled_at : undefined,
         eventCreated,
       });
       return { kind: 'applied', userId: resolved.userId };
