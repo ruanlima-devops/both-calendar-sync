@@ -72,6 +72,24 @@ describe('entitlement gate routing', () => {
     expect(resolveEntitlementRedirect(ent, '(app)/paywall')).toBe('/(app)/(tabs)');
   });
 
+  it('allows active trial users to stay on paywall for upgrade checkout', () => {
+    const ent = computeEntitlement(
+      {
+        ...expiredSub,
+        status: 'trialing',
+        canceled_at: null,
+        trial_started_at: '2026-08-01T00:00:00.000Z',
+        trial_ends_at: '2026-08-15T00:00:00.000Z',
+        current_period_end: null,
+      },
+      new Date('2026-08-10T00:00:00.000Z'),
+    );
+    expect(ent.hasAccess).toBe(true);
+    expect(ent.source).toBe('trial');
+    expect(resolveEntitlementRedirect(ent, '(app)/paywall')).toBeNull();
+    expect(resolveEntitlementRedirect(ent, '(app)/(tabs)/calendars')).toBeNull();
+  });
+
   it('treats logout as no access', () => {
     const after = entitlementAfterLogout();
     expect(after.hasAccess).toBe(false);
