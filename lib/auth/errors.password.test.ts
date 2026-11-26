@@ -33,4 +33,14 @@ describe('auth error classification (password)', () => {
   it('keeps Google fallback for platform errors in google context', () => {
     expect(userMessageForAuthError(new Error('weird'), 'google')).toBe(AUTH_MESSAGES.googleFailed);
   });
+
+  it('uses non-Google copy for email/callback failures', () => {
+    expect(userMessageForAuthError(new Error('Token has expired or is invalid'), 'password')).toBe(
+      AUTH_MESSAGES.invalidRecovery,
+    );
+    expect(userMessageForAuthError(new Error('weird_platform'), 'password')).toBe(AUTH_MESSAGES.platform);
+    expect(userMessageForAuthError(new Error('weird_platform'), 'password')).not.toBe(
+      AUTH_MESSAGES.googleFailed,
+    );
+  });
 });

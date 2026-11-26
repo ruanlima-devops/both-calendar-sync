@@ -22,8 +22,17 @@ export default function AuthCallbackScreen() {
 
     async function complete() {
       try {
+        const winHref = typeof window !== 'undefined' ? window.location.href : null;
+        // On web, prefer location when it carries auth params — Linking.getInitialURL()
+        // can return a stale origin without token_hash/code and skip email confirm.
+        const hasAuthParams = (u: string | null) =>
+          !!u && /[?&#](?:token_hash|code|access_token|type)=/.test(u);
         const initial = await Linking.getInitialURL();
-        const href = initial ?? (typeof window !== 'undefined' ? window.location.href : null);
+        const href = hasAuthParams(winHref)
+          ? winHref
+          : hasAuthParams(initial)
+            ? initial
+            : (winHref ?? initial);
         if (!href) {
           router.replace('/');
           return;
@@ -36,7 +45,13 @@ export default function AuthCallbackScreen() {
           router.replace('/(auth)/login');
           return;
         }
-        setError(userMessageForAuthError(caught));
+        const hrefHint =
+          (typeof window !== 'undefined' ? window.location.href : '') +
+          String(params.error ?? '');
+        const ctx = /token_hash|type=signup|type=recovery|type=email/.test(hrefHint)
+          ? 'password'
+          : 'google';
+        setError(userMessageForAuthError(caught, ctx));
       }
     }
 
