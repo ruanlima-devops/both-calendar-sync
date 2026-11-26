@@ -1,0 +1,70 @@
+# SYN-05 / C0.1 — STAGE watchdog (dry-run only until separate PO auth)
+# Schedule stays commented. No Issues write. No network/write flags.
+# C0.1 publication = branch+PR only; does NOT activate monitoring.
+
+name: Both STAGE Watchdog (dry-run)
+
+on:
+  # schedule intentionally disabled until separate PO auth enables it:
+  # schedule:
+  #   - cron: '*/10 * * * *'
+  workflow_dispatch:
+    # No inputs — C0: no network/write/project-ref/live selectors.
+
+permissions:
+  contents: read
+  # issues: write — intentionally OMITTED until PO authorizes delivery (C3).
+  # Prefer a separate delivery workflow when authorized.
+
+concurrency:
+  group: both-stage-watchdog-qszggrrjhcwltnmxpxcy
+  cancel-in-progress: false
+
+env:
+  BOTH_WATCHDOG_DRY_RUN: '1'
+  BOTH_WATCHDOG_GITHUB_WRITE: '0'
+  BOTH_WATCHDOG_ENABLE_NETWORK: '0'
+  STAGE_PROJECT_REF: qszggrrjhcwltnmxpxcy
+
+jobs:
+  evaluate:
+    name: Evaluate STAGE signals (dry-run)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # actions/checkout@v6.1.0 — https://github.com/actions/checkout/releases/tag/v6.1.0
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      # actions/setup-node@v7.1.0 — https://github.com/actions/setup-node/releases/tag/v7.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Unit tests (watchdog)
+        run: npx vitest run scripts/syn05-watchdog
+      - name: Dry-run evaluate (fixtures / no network)
+        env:
+          BOTH_WATCHDOG_DRY_RUN: '1'
+          BOTH_WATCHDOG_GITHUB_WRITE: '0'
+          BOTH_WATCHDOG_ENABLE_NETWORK: '0'
+        run: node --experimental-strip-types scripts/syn05-watchdog/run.ts
+      - name: Enforce C0 safety invariants
+        run: |
+          set -euo pipefail
+          if [ "${BOTH_WATCHDOG_GITHUB_WRITE}" = "1" ]; then
+            echo "GITHUB write must not be enabled without PO auth" >&2
+            exit 1
+          fi
+          if [ "${BOTH_WATCHDOG_ENABLE_NETWORK}" = "1" ]; then
+            echo "Network must remain disabled in C0 dry-run workflow" >&2
+            exit 1
+          fi
+          if [ "${BOTH_WATCHDOG_DRY_RUN}" != "1" ]; then
+            echo "Dry-run must remain enabled" >&2
+            exit 1
+          fi
+          if [ "${STAGE_PROJECT_REF}" != "qszggrrjhcwltnmxpxcy" ]; then
+            echo "Non-STAGE project_ref refused" >&2
+            exit 1
+          fi

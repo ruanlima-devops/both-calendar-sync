@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Linking, Modal, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { Linking, Modal, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -7,6 +7,8 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Typography } from '@/components/ui/Typography';
 import { useSession } from '@/context/session';
 import { useToast } from '@/context/toast';
+import { disconnectConfirmCopy } from '@/lib/calendars/disconnect-confirm';
+import { confirmAction, showMessage } from '@/lib/confirm';
 import { friendlyError } from '@/lib/errors';
 import { connectCalendar } from '@/lib/oauth';
 import { consumeOAuthComplete } from '@/lib/oauth-complete';
@@ -69,7 +71,7 @@ export default function CalendarsScreen() {
   useFocusEffect(
     useCallback(() => {
       void load();
-      const completed = consumeOAuthComplete();
+      const completed = consumeOAuthComplete((payload) => !payload.ticket);
       if (!completed?.ok || !completed.provider) return;
       showToast(completed.provider === 'microsoft' ? 'Microsoft conectado' : 'Google conectado');
     }, [load, showToast]),
@@ -83,7 +85,7 @@ export default function CalendarsScreen() {
     if (connecting) return;
     setConnecting(provider);
     try {
-      await connectCalendar(provider);
+      if ((await connectCalendar(provider)) === 'cancelled') return;
       const providerCode = provider === 'google' ? 'GOOGLE' : 'MICROSOFT';
       const { data: cons, error } = await supabase
         .from('calendar_connections')
@@ -97,9 +99,21 @@ export default function CalendarsScreen() {
       await load();
       showToast(provider === 'microsoft' ? 'Microsoft conectado' : 'Google conectado');
     } catch (err) {
-      Alert.alert('Both', friendlyError(err, 'Não foi possível conectar o calendário.'));
+      showMessage('Both', friendlyError(err, 'Não foi possível conectar o calendário.'));
     } finally {
       setConnecting(null);
+    }
+  }
+
+  async function disconnect(conn: CalendarConnection) {
+    const confirmed = await confirmAction(disconnectConfirmCopy(conn.provider));
+    if (!confirmed) return;
+    try {
+      await invokeFunction('disconnect-calendar', { connectionId: conn.id });
+      await load();
+      showToast('Conta desconectada');
+    } catch (err) {
+      showMessage('Both', friendlyError(err, 'Não foi possível desconectar a conta.'));
     }
   }
 
@@ -126,7 +140,7 @@ export default function CalendarsScreen() {
       await load();
       showToast('Apple iCloud conectado');
     } catch (err) {
-      Alert.alert('Both', friendlyError(err, 'Não foi possível conectar o iCloud.'));
+      showMessage('Both', friendlyError(err, 'Não foi possível conectar o iCloud.'));
     } finally {
       setConnecting(null);
     }
@@ -143,11 +157,11 @@ export default function CalendarsScreen() {
       await load();
       showToast('Sincronização concluída');
       if (result.failed && result.failed > 0) {
-        Alert.alert('Sincronização parcial', 'Alguns calendários não sincronizaram.');
+        showMessage('Sincronização parcial', 'Alguns calendários não sincronizaram.');
       }
     } catch (err) {
       await load();
-      Alert.alert('Sincronização', friendlyError(err));
+      showMessage('Sincronização', friendlyError(err));
     } finally {
       setSyncingId(null);
     }
@@ -248,29 +262,7 @@ export default function CalendarsScreen() {
                 </View>
               ) : null}
               <View style={{ flex: 1, minWidth: 120 }}>
-                <Button
-                  label="Desconectar"
-                  variant="ghost"
-                  onPress={() => {
-                    Alert.alert(
-                      'Desconectar',
-                      conn.provider === 'ICLOUD'
-                        ? 'Remover esta conta? Você também pode revogar a senha específica de app em account.apple.com.'
-                        : 'Remover esta conta?',
-                      [
-                        { text: 'Cancelar', style: 'cancel' },
-                        {
-                          text: 'Desconectar',
-                          style: 'destructive',
-                          onPress: () =>
-                            void invokeFunction('disconnect-calendar', { connectionId: conn.id })
-                              .then(load)
-                              .then(() => showToast('Conta desconectada')),
-                        },
-                      ],
-                    );
-                  }}
-                />
+                <Button label="Desconectar" variant="ghost" onPress={() => void disconnect(conn)} />
               </View>
             </View>
             {calendars.filter((c) => c.connection_id === conn.id).map((cal) => (

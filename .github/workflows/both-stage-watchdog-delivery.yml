@@ -1,0 +1,42 @@
+# SYN-05 / C3-B.5 — Delivery workflow FINAL OFF
+#
+# Post-supervised-test disablement:
+# - Quoted "on" + workflow_dispatch only (no empty-run on:{} noise)
+# - No schedule / push / pull_request / workflow_run
+# - No issues:write anywhere
+# - No supervised oneshot path
+# - Adapter code remains in repo but is not wired by this workflow
+
+name: Both STAGE Watchdog Delivery
+
+"on":
+  workflow_dispatch:
+    inputs:
+      c3_b5_mode:
+        description: "Delivery remains OFF after C3-B.5"
+        required: true
+        type: choice
+        options:
+          - OFF
+        default: OFF
+
+permissions:
+  contents: read
+
+concurrency:
+  group: both-stage-watchdog-delivery-qszggrrjhcwltnmxpxcy
+  cancel-in-progress: false
+
+jobs:
+  delivery-off:
+    name: Delivery OFF (refuse)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Refuse supervised write
+        run: |
+          echo "C3-B.5 delivery workflow is permanently OFF for this certification."
+          echo "mode=${{ inputs.c3_b5_mode }}"
+          exit 0

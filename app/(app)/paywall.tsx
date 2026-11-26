@@ -15,6 +15,7 @@ import {
   purchaseMonthly,
   restorePurchases,
 } from '@/lib/billing/purchases';
+import { checkoutCanceledNotice } from '@/lib/billing/paywall-params';
 import { friendlyError } from '@/lib/errors';
 import { space } from '@/lib/theme';
 import { supabase } from '@/lib/supabase';
@@ -65,7 +66,8 @@ export default function PaywallScreen() {
   }, [native]);
 
   useEffect(() => {
-    if (params.canceled) setError(null);
+    const notice = checkoutCanceledNotice(params.canceled);
+    setError(notice);
   }, [params.canceled]);
 
   useEffect(() => {

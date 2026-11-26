@@ -1,0 +1,64 @@
+# SYN-05 / C0.1 — self-monitor design (dry-run / local tests only)
+# Separate file ≠ platform independence: still GitHub Actions.
+# Schedule commented. No Issues write.
+
+name: Both STAGE Watchdog Self-Monitor (design)
+
+on:
+  # schedule:
+  #   - cron: '7,37 * * * *'  # offset from primary — NOT active
+  workflow_dispatch:
+    # No inputs — no live/write/network selectors.
+
+permissions:
+  contents: read
+  actions: read
+  # issues: write omitted until delivery auth
+
+concurrency:
+  group: both-stage-watchdog-self-qszggrrjhcwltnmxpxcy
+  cancel-in-progress: false
+
+env:
+  BOTH_WATCHDOG_DRY_RUN: '1'
+  BOTH_WATCHDOG_GITHUB_WRITE: '0'
+  BOTH_WATCHDOG_ENABLE_NETWORK: '0'
+  STAGE_PROJECT_REF: qszggrrjhcwltnmxpxcy
+
+jobs:
+  heartbeat-check:
+    name: Check primary watchdog freshness (placeholder)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # actions/checkout@v6.1.0 — https://github.com/actions/checkout/releases/tag/v6.1.0
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      # actions/setup-node@v7.1.0 — https://github.com/actions/setup-node/releases/tag/v7.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Self-monitor unit tests
+        run: npx vitest run scripts/syn05-watchdog/self-monitor.test.ts
+      - name: Enforce C0 safety invariants
+        run: |
+          set -euo pipefail
+          if [ "${BOTH_WATCHDOG_GITHUB_WRITE}" = "1" ]; then
+            echo "GITHUB write must not be enabled" >&2
+            exit 1
+          fi
+          if [ "${BOTH_WATCHDOG_ENABLE_NETWORK}" = "1" ]; then
+            echo "Network must remain disabled in C0 self-monitor" >&2
+            exit 1
+          fi
+          if [ "${STAGE_PROJECT_REF}" != "qszggrrjhcwltnmxpxcy" ]; then
+            echo "Non-STAGE project_ref refused" >&2
+            exit 1
+          fi
+      - name: Note
+        run: |
+          echo "Remote self-monitor remains BLOCKED until PO enables schedule + delivery."
+          echo "Same-workflow second job is NOT sufficient independence."
+          echo "Another Actions workflow is NOT independent of the GitHub Actions platform."

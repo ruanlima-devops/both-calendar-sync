@@ -1,4 +1,9 @@
+import { timingSafeEqual } from '../crypto/tokens.ts';
 import { env, envOptional, logSafe } from '../http.ts';
+import {
+  resolveCancelAtPeriodEnd,
+  resolveSubscriptionPeriodBounds,
+} from './cancel-at-period-end.ts';
 
 const STRIPE_API = 'https://api.stripe.com/v1';
 
@@ -8,19 +13,41 @@ function secretKey(): string {
   return key;
 }
 
-async function stripeForm<T>(path: string, params: Record<string, string>): Promise<T> {
+export type StripeSubscriptionSnapshot = {
+  id: string;
+  customer: string | null;
+  status: string;
+  cancel_at_period_end: boolean;
+  cancel_at: number | null;
+  canceled_at: number | null;
+  current_period_start: number | null;
+  current_period_end: number | null;
+};
+
+function stripeError(body: unknown, status: number): Error {
+  const message =
+    (body as { error?: { message?: string } })?.error?.message ?? `stripe_${status}`;
+  return Object.assign(new Error(message), { httpStatus: status });
+}
+
+async function stripeForm<T>(
+  path: string,
+  params: Record<string, string>,
+  opts?: { idempotencyKey?: string },
+): Promise<T> {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${secretKey()}`,
+    'Content-Type': 'application/x-www-form-urlencoded',
+  };
+  if (opts?.idempotencyKey) headers['Idempotency-Key'] = opts.idempotencyKey;
+
   const res = await fetch(`${STRIPE_API}${path}`, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${secretKey()}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
+    headers,
     body: new URLSearchParams(params),
   });
   const body = await res.json();
-  if (!res.ok) {
-    throw new Error((body as { error?: { message?: string } }).error?.message ?? `stripe_${res.status}`);
-  }
+  if (!res.ok) throw stripeError(body, res.status);
   return body as T;
 }
 
@@ -29,14 +56,115 @@ async function stripeGet<T>(path: string): Promise<T> {
     headers: { Authorization: `Bearer ${secretKey()}` },
   });
   const body = await res.json();
-  if (!res.ok) {
-    throw new Error((body as { error?: { message?: string } }).error?.message ?? `stripe_${res.status}`);
-  }
+  if (!res.ok) throw stripeError(body, res.status);
+  return body as T;
+}
+
+async function stripeDelete<T>(
+  path: string,
+  opts?: { idempotencyKey?: string },
+): Promise<T> {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${secretKey()}`,
+  };
+  if (opts?.idempotencyKey) headers['Idempotency-Key'] = opts.idempotencyKey;
+  const res = await fetch(`${STRIPE_API}${path}`, { method: 'DELETE', headers });
+  const body = await res.json();
+  if (!res.ok) throw stripeError(body, res.status);
   return body as T;
 }
 
 export function stripeConfigured(): boolean {
   return Boolean(envOptional('STRIPE_SECRET_KEY'));
+}
+
+/** Detect secret key mode without logging the key. */
+export function stripeSecretMode(): 'test' | 'live' | 'unknown' {
+  const key = envOptional('STRIPE_SECRET_KEY') ?? '';
+  if (key.startsWith('sk_test_')) return 'test';
+  if (key.startsWith('sk_live_')) return 'live';
+  return 'unknown';
+}
+
+/**
+ * Fail closed when STAGE/dev would use Live keys (or unknown prefix).
+ * Production Live requires APP_ENV=production explicitly.
+ */
+export function assertStripeKeyMode(): void {
+  const mode = stripeSecretMode();
+  const appEnv = (envOptional('APP_ENV') ?? envOptional('BOTH_ENV') ?? 'stage').toLowerCase();
+  if (mode === 'unknown') {
+    throw Object.assign(new Error('stripe_key_mode_unknown'), { code: 'STRIPE_MODE_MISMATCH' });
+  }
+  if (mode === 'live' && appEnv !== 'production') {
+    throw Object.assign(new Error('stripe_live_blocked_outside_production'), {
+      code: 'STRIPE_MODE_MISMATCH',
+    });
+  }
+  if (mode === 'test' && appEnv === 'production') {
+    throw Object.assign(new Error('stripe_test_blocked_in_production'), {
+      code: 'STRIPE_MODE_MISMATCH',
+    });
+  }
+}
+
+function asUnix(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function asSubscriptionSnapshot(raw: Record<string, unknown>): StripeSubscriptionSnapshot {
+  const customer =
+    typeof raw.customer === 'string'
+      ? raw.customer
+      : raw.customer && typeof raw.customer === 'object' && typeof (raw.customer as { id?: unknown }).id === 'string'
+        ? String((raw.customer as { id: string }).id)
+        : null;
+  const status = String(raw.status ?? '');
+  const resolvedCancel = resolveCancelAtPeriodEnd(raw);
+  const period = resolveSubscriptionPeriodBounds(raw);
+  return {
+    id: String(raw.id ?? ''),
+    customer,
+    status,
+    // Snapshot always materializes a boolean for callers that require one.
+    cancel_at_period_end: resolvedCancel === true,
+    cancel_at: asUnix(raw.cancel_at),
+    canceled_at: asUnix(raw.canceled_at),
+    current_period_start: period.currentPeriodStart ?? null,
+    current_period_end: period.currentPeriodEnd ?? null,
+  };
+}
+
+/** List subscriptions for a customer (all statuses; capped). */
+export async function listCustomerSubscriptions(
+  customerId: string,
+): Promise<StripeSubscriptionSnapshot[]> {
+  const qs = new URLSearchParams({
+    customer: customerId,
+    status: 'all',
+    limit: '100',
+  });
+  const body = await stripeGet<{ data?: Array<Record<string, unknown>> }>(
+    `/subscriptions?${qs.toString()}`,
+  );
+  return (body.data ?? []).map(asSubscriptionSnapshot).filter((s) => s.id);
+}
+
+export async function getSubscription(subscriptionId: string): Promise<StripeSubscriptionSnapshot> {
+  const raw = await stripeGet<Record<string, unknown>>(`/subscriptions/${subscriptionId}`);
+  return asSubscriptionSnapshot(raw);
+}
+
+/** Immediate cancel — prevents future renewals. Does not delete the Customer. */
+export async function cancelSubscriptionImmediate(
+  subscriptionId: string,
+  opts?: { idempotencyKey?: string },
+): Promise<StripeSubscriptionSnapshot> {
+  const raw = await stripeDelete<Record<string, unknown>>(`/subscriptions/${subscriptionId}`, {
+    idempotencyKey: opts?.idempotencyKey,
+  });
+  logSafe('[billing-cancel]', { subscriptionId, status: String(raw.status ?? '') });
+  return asSubscriptionSnapshot(raw);
 }
 
 export function appUrl(): string {
@@ -105,23 +233,58 @@ export async function createPortalSession(customerId: string): Promise<{ url: st
   return { url: session.url };
 }
 
+/** Default Stripe signature age window (seconds). */
+export const STRIPE_SIGNATURE_TOLERANCE_SEC = 300;
+
+export function parseStripeSignatureHeader(header: string): {
+  timestamp: string | null;
+  signatures: string[];
+} {
+  let timestamp: string | null = null;
+  const signatures: string[] = [];
+  for (const part of header.split(',')) {
+    const eq = part.indexOf('=');
+    if (eq <= 0) continue;
+    const k = part.slice(0, eq).trim();
+    const v = part.slice(eq + 1).trim();
+    if (!k || !v) continue;
+    if (k === 't') timestamp = v;
+    if (k === 'v1') signatures.push(v);
+  }
+  return { timestamp, signatures };
+}
+
+function hexFromBuffer(buf: ArrayBuffer): string {
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/**
+ * Verify Stripe-Signature over the raw request body.
+ * Uses timing-safe comparison; accepts any matching v1 signature in the header.
+ * Secret is HMAC'd as UTF-8 bytes of the full `whsec_…` string (matches STAGE handler).
+ */
 export async function verifyWebhookSignature(
   payload: string,
   signatureHeader: string,
+  options?: {
+    secret?: string;
+    nowMs?: number;
+    toleranceSec?: number;
+  },
 ): Promise<boolean> {
-  const secret = env('STRIPE_WEBHOOK_SECRET');
-  const parts = signatureHeader.split(',').reduce<Record<string, string>>((acc, part) => {
-    const [k, v] = part.split('=');
-    if (k && v) acc[k.trim()] = v.trim();
-    return acc;
-  }, {});
+  const secret = options?.secret ?? env('STRIPE_WEBHOOK_SECRET');
+  if (!signatureHeader || !payload) return false;
 
-  const timestamp = parts.t;
-  const signature = parts.v1;
-  if (!timestamp || !signature) return false;
+  const { timestamp, signatures } = parseStripeSignatureHeader(signatureHeader);
+  if (!timestamp || signatures.length === 0) return false;
+  if (!/^\d+$/.test(timestamp)) return false;
 
-  const age = Math.abs(Date.now() / 1000 - Number(timestamp));
-  if (age > 300) return false;
+  const nowMs = options?.nowMs ?? Date.now();
+  const tolerance = options?.toleranceSec ?? STRIPE_SIGNATURE_TOLERANCE_SEC;
+  const age = Math.abs(nowMs / 1000 - Number(timestamp));
+  if (age > tolerance) return false;
 
   const signed = `${timestamp}.${payload}`;
   const key = await crypto.subtle.importKey(
@@ -132,11 +295,14 @@ export async function verifyWebhookSignature(
     ['sign'],
   );
   const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(signed));
-  const expected = Array.from(new Uint8Array(mac))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
+  const expected = hexFromBuffer(mac);
 
-  return expected === signature;
+  // Check every v1 candidate; avoid short-circuit so timing does not leak which slot matched.
+  let matched = false;
+  for (const signature of signatures) {
+    if (timingSafeEqual(expected, signature)) matched = true;
+  }
+  return matched;
 }
 
 export function unixToIso(unix: number | null | undefined): string | null {

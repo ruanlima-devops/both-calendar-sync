@@ -2,6 +2,7 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    "allowImportingTsExtensions": true,
     "paths": {
       "@/*": [
         "./*"
@@ -14,5 +15,11 @@
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
   ],
-  "exclude": ["supabase/functions", "node_modules", "scripts/check-environment.ts"]
+  "exclude": [
+    "supabase/functions",
+    "node_modules",
+    "scripts/check-environment.ts",
+    "scripts/oauth-local",
+    "e2e"
+  ]
 }

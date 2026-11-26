@@ -1,4 +1,9 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
+import {
+  evaluateSyncEntitlement,
+  pauseIntegrationsForUser,
+  type SyncEntitlementBlockReason,
+} from '../billing/entitlement.ts';
 import { decryptSecret, encryptSecret, isAuthRequiredError, needsRefresh, randomHex, sha256Hex } from '../crypto/tokens.ts';
 import type { FirewallRule } from '../firewall/rules.ts';
 import { env, envOptional, functionPublicUrl, logSafe } from '../http.ts';
@@ -12,6 +17,7 @@ import { persistCalendarNotification } from '../notifications/store.ts';
 import { googleFullSyncWindow } from './dates.ts';
 import { applyIncomingEvent, createOriginWithOptionalMirrors } from './engine.ts';
 import { PostgresStore } from './postgres-store.ts';
+import { shouldKeepActiveWatch } from './watch-policy.ts';
 import type {
   CalendarProvider,
   CreateEventInput,
@@ -328,6 +334,57 @@ async function notifyVisibleCalendarChange(
   });
 }
 
+/**
+ * BIL-02 — finalize a claimed job when entitlement is definitively denied.
+ * Marks failed (terminal) so the same job does not retry forever; does not throw.
+ * Keeps `paused_by_entitlement` coherent as a derived signal (not the sole source of truth).
+ * Catch-up after reactivation: reconcile-sync / sync-now + preserved sync cursors.
+ */
+export async function finalizeSyncJobBlockedByEntitlement(
+  db: SupabaseClient,
+  job: { id: string; user_id: string; connection_id?: string | null; connected_calendar_id?: string | null },
+  reason: Extract<SyncEntitlementBlockReason, 'blocked_by_entitlement'> = 'blocked_by_entitlement',
+): Promise<void> {
+  await pauseIntegrationsForUser(db, job.user_id);
+  await db
+    .from('sync_jobs')
+    .update({
+      status: 'failed',
+      error: reason,
+      completed_at: new Date().toISOString(),
+    })
+    .eq('id', job.id);
+  logSafe('[calendar-sync] job_skipped_entitlement', {
+    connectionId: job.connection_id,
+    calendarId: job.connected_calendar_id,
+    reason,
+  });
+}
+
+/**
+ * BIL-02 — entitlement lookup indeterminate (DB/network). Fail-closed for external sync,
+ * but do NOT pause integrations or treat as expiry. Job ends terminal for this attempt;
+ * catch-up via later reconcile/sync-now when lookup succeeds (cursors unchanged).
+ */
+export async function finalizeSyncJobEntitlementUnavailable(
+  db: SupabaseClient,
+  job: { id: string; user_id: string; connection_id?: string | null; connected_calendar_id?: string | null },
+): Promise<void> {
+  await db
+    .from('sync_jobs')
+    .update({
+      status: 'failed',
+      error: 'entitlement_lookup_failed',
+      completed_at: new Date().toISOString(),
+    })
+    .eq('id', job.id);
+  logSafe('[calendar-sync] job_skipped_entitlement_unavailable', {
+    connectionId: job.connection_id,
+    calendarId: job.connected_calendar_id,
+    reason: 'entitlement_lookup_failed',
+  });
+}
+
 export async function syncConnectedCalendar(
   db: SupabaseClient,
   calendarId: string,
@@ -335,6 +392,18 @@ export async function syncConnectedCalendar(
 ): Promise<{ imported: number; errors: string[] }> {
   const started = Date.now();
   const { ctx, calendar } = await loadSyncContext(db, calendarId);
+
+  // BIL-02 central gate — before any provider token use, external write, or cursor advance.
+  const gate = await evaluateSyncEntitlement(db, ctx.userId);
+  if (!gate.allow) {
+    if (gate.reason === 'blocked_by_entitlement') {
+      await pauseIntegrationsForUser(db, ctx.userId);
+      throw new Error('ENTITLEMENT_REQUIRED');
+    }
+    // Transient/indeterminate — fail-closed without pausing or advancing sync_state.
+    throw new Error('ENTITLEMENT_UNAVAILABLE');
+  }
+
   // Resolve tokens first: successful refresh / still-valid access clears AUTH_REQUIRED.
   // Reconcile/processSyncJob still skip AUTH_REQUIRED to avoid retry storms when revoke is real.
   const { accessToken, provider } = await getValidAccessToken(db, ctx.connectionId);
@@ -687,6 +756,18 @@ export async function processSyncJob(db: SupabaseClient, jobId: string): Promise
       return;
     }
 
+    // BIL-02 — block expired/ineligible users even for jobs enqueued before expiry.
+    // Lookup failures are fail-closed but not treated as definitive expiry.
+    const entitlementGate = await evaluateSyncEntitlement(db, String(claimed.user_id));
+    if (!entitlementGate.allow) {
+      if (entitlementGate.reason === 'blocked_by_entitlement') {
+        await finalizeSyncJobBlockedByEntitlement(db, claimed);
+      } else {
+        await finalizeSyncJobEntitlementUnavailable(db, claimed);
+      }
+      return;
+    }
+
     if (claimed.connected_calendar_id) {
       await syncConnectedCalendar(db, claimed.connected_calendar_id, 'auto');
     } else {
@@ -751,18 +832,23 @@ export async function ensureWebhook(db: SupabaseClient, calendarId: string): Pro
     logSafe(`${watchLog(ctx.provider)} skipped_auth_required`, { calendarId });
     return;
   }
-  const horizon = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
   const { data: current } = await db
     .from('webhook_subscriptions')
     .select('*')
     .eq('connected_calendar_id', calendarId)
     .eq('status', 'active')
     .maybeSingle();
-  if (current && new Date(current.expires_at) > new Date(horizon)) {
-    if (ctx.provider === 'MICROSOFT' || current.last_notification_at) {
-      logSafe(`${watchLog(ctx.provider)} already_active`, { calendarId, expiresAt: current.expires_at });
-      return;
-    }
+  if (
+    current &&
+    shouldKeepActiveWatch({
+      provider: ctx.provider,
+      expiresAt: current.expires_at,
+      createdAt: current.created_at,
+      lastNotificationAt: current.last_notification_at,
+    })
+  ) {
+    logSafe(`${watchLog(ctx.provider)} already_active`, { calendarId, expiresAt: current.expires_at });
+    return;
   }
 
   const { accessToken, provider } = await getValidAccessToken(db, ctx.connectionId);
