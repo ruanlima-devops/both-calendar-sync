@@ -134,6 +134,11 @@ export const FRONTEND_CLIENT_SAFE_SKIP_EXACT = new Set([
   'context/session.tsx',
   'lib/auth/routing.ts',
   'lib/auth/routing.test.ts',
+  // Email confirm / recovery callback (token_hash + type; client-only)
+  'app/auth/callback.tsx',
+  'lib/auth/callback-url.ts',
+  'lib/auth/callback.ts',
+  'lib/auth/callback.test.ts',
   'lib/errors.ts',
   'lib/oauth.ts',
   'lib/oauth-complete.ts',
