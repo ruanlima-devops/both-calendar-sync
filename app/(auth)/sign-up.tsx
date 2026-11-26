@@ -143,7 +143,12 @@ export default function SignUpScreen() {
           <View style={[styles.rule, { backgroundColor: colors.hairline }]} />
         </View>
 
-        <GoogleSignInButton colors={colors} busy={blocked} onPress={() => void signIn()} />
+        <GoogleSignInButton
+          colors={colors}
+          busy={googleBusy}
+          disabled={blocked}
+          onPress={() => void signIn()}
+        />
 
         <Pressable
           onPress={() => router.replace('/(auth)/login')}
