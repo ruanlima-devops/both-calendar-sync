@@ -2,16 +2,16 @@
 
 | COMPONENT | STAGE_RESOURCE | PROD_RESOURCE | CURRENT_STATUS | OWNER | EST_COST | CREDENTIAL_ISOLATION | REQUIRED_ACTION |
 |-----------|----------------|---------------|----------------|-------|----------|----------------------|-----------------|
-| Supabase project | qszggrrjhcwltnmxpxcy | — | PROD missing | PO/ops | $0–25/mo | must be new | Create project (API Forbidden now) |
-| DB migrations | applied on STAGE | — | not executed on PROD | eng | $0 | N/A | After create |
-| Edge Functions | deployed STAGE | — | not executed | eng | $0 | new secrets | After create |
-| CF Worker | both-calendar-sync-stage | both-calendar-sync-prod (planned) | config only `wrangler.prod.jsonc` | eng | $0 | separate | Deploy after PO DNS |
-| DNS hostname | stage.bothcalendar.com | app.bothcalendar.com? | no `app` records | PO | $0 | N/A | Approve hostname |
-| Google Auth client | STAGE Auth redirect | PROD Auth redirect | not created | PO/eng | $0 | separate clients | Console |
-| Google Calendar client | Both STAGE Calendar | Both PROD Calendar | not created | PO/eng | $0 | separate | Console + verification path |
-| Microsoft Entra app | STAGE | PROD | not verified in az tenant | PO/eng | $0 | separate | Console |
-| SMTP | STAGE Resend path | PROD sender | unknown prod domain auth | PO | varies | separate | Configure + SPF/DKIM |
-| Stripe | Test | Live OFF | Live unauthorized | PO | fees | separate keys | Keep Test/off for beta |
-| GitHub Actions | Deploy STAGE | Deploy PROD Internal | workflow added (dispatch) | eng | $0 | env `production` | Add secrets when PROD exists |
-| Observability | manual | manual | SYN-05 OFF | PO | — | — | Decide E1/E2 |
-| Beta invites | flag OFF | flag ON when launch | schema landing STAGE | eng | $0 | server-side | Enable only on PROD with PO |
+| Supabase project | qszggrrjhcwltnmxpxcy | **djxulqyuafhihmuyzvvk** | Both PROD exists (Free/nano) | PO/ops | $0 Free | isolated | Apply migrations; secrets |
+| DB migrations | applied STAGE | empty PROD | not executed | eng | $0 | N/A | PROD_INTERNAL when approved |
+| Edge Functions | deployed STAGE | none | not executed | eng | $0 | new secrets | After OAuth clients |
+| CF Worker | both-calendar-sync-stage | both-calendar-sync-prod (planned) | config only | eng | $0 | separate | After DNS/PO |
+| DNS app/auth | — | app./auth. | **no records** | PO | $0 | N/A | Approve hostname |
+| Custom Domain | n/a | auth.bothcalendar.com | **blocked on Free**; +$10/mo on Pro | PO | Pro+$10 | official only | COST approval |
+| Google Cloud | both-stage | **both-production** | project created | eng/PO | $0 | separate | Consent + 2 clients |
+| Google Sign-In / Calendar clients | STAGE Auth + Calendar | pending | not created | eng | $0 | separate | Console |
+| Microsoft Entra | STAGE | pending | az on wrong tenant (EAF) | PO | $0 | separate | Both tenant admin |
+| SMTP | STAGE | TBD | — | PO | varies | separate | Domain auth |
+| Stripe | Test | Live OFF | unauthorized | PO | fees | separate | Keep off |
+| Auth signup | STAGE QA | **disabled** (session) | Google/Azure off | eng | $0 | — | Keep until invites |
+| GitHub Actions | Deploy STAGE | Deploy PROD Internal | guards + verified ref | eng | $0 | env production | Add secrets |

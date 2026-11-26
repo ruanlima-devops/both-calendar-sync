@@ -1,6 +1,6 @@
 # Both — Production Architecture
 
-**Captured (UTC):** 2026-11-26T03:57:00Z  
+**Captured (UTC):** 2026-11-26T04:45:00Z  
 **Strategy (PO):** STAGE = internal QA only · PROD = all external users (incl. closed beta)  
 **External access now:** **NO**
 
@@ -10,51 +10,46 @@
 
 | Component | STAGE (observed) | PROD (observed) |
 |-----------|------------------|-----------------|
-| Supabase | `qszggrrjhcwltnmxpxcy` “Both STAGE” sa-east-1 ACTIVE | **None** — create Forbidden (token lacks projects create) |
-| Cloudflare account | `61b030810fd93e4f3ca35bebd756ccb8` | same account available |
-| Worker | `both-calendar-sync-stage` → `stage.bothcalendar.com` | **No** `both-calendar-sync-prod` worker yet |
-| DNS | `stage.` / apex / `www` → Cloudflare anycast | `app.bothcalendar.com` **no records** |
-| Stripe | Test account `acct_1Uc9CcFbkGjeaJ48` | Live **not** authorized |
-| Google OAuth | STAGE Calendar client + Auth client (docs) | **Not provisioned** |
-| Microsoft Entra | STAGE Edge client (docs); az list empty in current tenant | **Not verified in this CLI tenant** |
+| Supabase | `qszggrrjhcwltnmxpxcy` “Both STAGE” sa-east-1 ACTIVE | **`djxulqyuafhihmuyzvvk` “Both PROD”** sa-east-1 nano |
+| Organization | Both Calendar Sync `otaqdspnjsewiymnqbmr` | same · **Free** plan |
+| Cloudflare account | `61b030810fd93e4f3ca35bebd756ccb8` | same |
+| Worker | `both-calendar-sync-stage` → `stage.bothcalendar.com` | **No** prod worker yet (`wrangler.prod.jsonc` prepared) |
+| DNS | apex / www / stage → CF anycast | `app.` / `auth.` **no records** |
+| Stripe | Test `acct_1Uc9CcFbkGjeaJ48` | Live **not** authorized |
+| Google Cloud | `both-stage` | **`both-production`** created |
+| Microsoft Entra | STAGE docs; az CLI on EAF tenant | Both tenant **not accessible** here |
 | Legacy Supabase | `sknpqjodttkpttaytdut` | **Forbidden — never use** |
 
 ---
 
-## Target isolation model
+## Custom domain (Auth branding)
+
+Official Supabase Custom Domains only:
+
+- Requires **Pro+** org
+- Add-on **~$10/domain/month/project**
+- Proposed host: `auth.bothcalendar.com` → CNAME `djxulqyuafhihmuyzvvk.supabase.co`
+
+`PROD_CUSTOM_DOMAIN_ELIGIBLE=BLOCKED` on Free  
+`PROD_CUSTOM_DOMAIN_COST_APPROVAL=PENDING`  
+`PROD_CUSTOM_DOMAIN_ACTIVE=NOT_EXECUTED`
+
+---
+
+## Isolation model
 
 ```
 develop ──► Deploy STAGE ──► qszg… + stage.bothcalendar.com
                  │
-manual PROD_INTERNAL ──► NEW supabase ref + both-calendar-sync-prod Worker
-                         (invite-only; Stripe Live OFF; no public DNS until PO)
+manual PROD_INTERNAL ──► djxul… + both-calendar-sync-prod Worker
+                         (signup disabled; Stripe Live OFF; no public DNS until PO)
 ```
 
 Rules:
 - No shared service_role / webhook / OAuth secrets.
-- No STAGE callbacks on PROD OAuth clients.
+- Separate Google Sign-In vs Calendar clients; separate MS Sign-In vs Calendar apps.
+- No STAGE callbacks on PROD clients.
 - No STAGE data copy into PROD.
 - SEC-07 tombstone remains on sync-calendar.
 
----
-
-## Cost estimate (before approval)
-
-| Resource | Est. | Notes |
-|----------|------|-------|
-| Supabase Free (2nd project) | **$0** if Free plan slot open | Create returned **Forbidden** — needs org owner / elevated token |
-| Supabase Pro | ~$25/mo | Only if Free unavailable — **NEEDS_PO_ACTION** |
-| Cloudflare Worker | $0 on Free/Workers paid quota | Worker create free; custom domain may need zone |
-| DNS `app.` record | $0 | **NEEDS_PO** before public routing |
-| Transactional email (Resend/etc.) | varies | Domain auth required |
-| Stripe Live | transaction fees | **Not authorized** |
-| SYN-05 / Better Stack | paid/ops | **OFF** |
-
-**PROD_COST_APPROVAL=PENDING** for any non-zero recurring spend. Zero-cost create blocked by API Forbidden.
-
----
-
-## Proposed PROD hostname
-
-Candidate only: `app.bothcalendar.com` (no DNS today).  
-Do **not** claim approved. Public DNS = PO decision.
+See also: `BOTH-PROD-OAUTH-ENTERPRISE-ARCHITECTURE.md`.
